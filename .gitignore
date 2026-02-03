@@ -1,0 +1,6 @@
+*.json
+*.log
+.env
+test.py
+venv
+__pycache__/
