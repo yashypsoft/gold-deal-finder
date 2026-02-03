@@ -71,7 +71,7 @@ jobs:
           echo "Force Scan: $FORCE_SCAN"
           
           # Run the scanner
-          python scanner.py
+          python main.py
           
           # Capture exit code
           echo "status=$?" >> $GITHUB_OUTPUT
