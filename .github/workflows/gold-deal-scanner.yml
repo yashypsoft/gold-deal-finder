@@ -31,6 +31,8 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GOLDAPI_TOKEN: ${{ secrets.GOLDAPI_TOKEN }}
+      METALPRICE_API_KEY: ${{ secrets.METALPRICE_API_KEY }}
       TEST_RUN: ${{ github.event.inputs.test_run || 'false' }}
       FORCE_SCAN: ${{ github.event.inputs.force_scan || 'false' }}
     
@@ -57,6 +59,8 @@ jobs:
           cat > .env << EOF
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          GOLDAPI_TOKEN=${{ secrets.GOLDAPI_TOKEN || '' }}
+          METALPRICE_API_KEY=${{ secrets.METALPRICE_API_KEY || '' }}
           EOF
           
           # Create cache directory
@@ -71,7 +75,7 @@ jobs:
           echo "Force Scan: $FORCE_SCAN"
           
           # Run the scanner
-          python main.py
+          python scanner.py
           
           # Capture exit code
           echo "status=$?" >> $GITHUB_OUTPUT
