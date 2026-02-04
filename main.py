@@ -54,7 +54,10 @@ class GoldDealFinder:
                 # Keep only last 100 deals in history
                 if len(self.deals_history) > 100:
                     self.deals_history = self.deals_history[-100:]
-        
+        good_deals = sorted(
+            good_deals,
+            key=lambda p: p.get("discount_percent", float("inf"))
+        )[:4]
         return good_deals
     
     async def run_scraping_cycle(self):

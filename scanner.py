@@ -49,7 +49,11 @@ class GitHubActionsScanner:
             
             if meets_criteria:
                 good_deals.append(product)
-        
+
+        good_deals = sorted(
+            good_deals,
+            key=lambda p: p.get("discount_percent", float("inf"))
+        )[:4]
         return good_deals
     
     async def send_telegram_summary(self, total_products, good_deals, duration):

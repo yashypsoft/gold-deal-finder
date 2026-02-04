@@ -363,7 +363,7 @@ class GoldPriceCalculator:
         if expected_price <= 0:
             return 0
         discount = ((expected_price - selling_price) / expected_price) * 100
-        return round(max(discount, 0), 2)  # Ensure non-negative
+        return round(max(discount, -5), 2)  # Ensure non-negative
     
     def get_price_summary(self) -> str:
         """Get formatted price summary for alerts"""
