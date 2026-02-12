@@ -1,3 +1,5 @@
+import json
+import os
 import requests
 import time
 import re
@@ -485,3 +487,23 @@ class GoldScraper:
         print(f"\n📊 Total products found: {len(all_products)}")
         
         return all_products
+
+    def scrape_all_with_cache(self, force_refresh=False):
+        """Scrape all sources with caching"""
+        cache_file = "data/latest_scan.json"
+        
+        # Check cache if not forcing refresh
+        if not force_refresh and os.path.exists(cache_file):
+            cache_age = time.time() - os.path.getmtime(cache_file)
+            if cache_age < 300:  # 5 minutes cache
+                with open(cache_file, 'r') as f:
+                    return json.load(f)
+        
+        # Perform fresh scrape
+        products = self.scrape_all()
+        
+        # Save to cache
+        with open(cache_file, 'w') as f:
+            json.dump(products, f)
+        
+        return products

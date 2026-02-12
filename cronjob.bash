@@ -2,7 +2,7 @@
 cd /Users/yashprajapati/YP-Projects/gold-deal-finder/
 
 # Make main.py executable
-chmod +x main.py
+chmod +x scanner.py
 
 # If main.py doesn't have shebang, add it at the top of main.py:
 # Add this as the first line: #!/usr/bin/env python3

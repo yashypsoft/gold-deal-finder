@@ -190,7 +190,9 @@ Run ID: #{os.getenv('GITHUB_RUN_NUMBER', 'N/A')}
                 'github_run_number': os.getenv('GITHUB_RUN_NUMBER', '')
             }
             
-            filename = f"scan_results_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+             # Save results in background
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"data/scan_results_{timestamp}.json"
             with open(filename, 'w') as f:
                 json.dump(results, f, indent=2, default=str)
             

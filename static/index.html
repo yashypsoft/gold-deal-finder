@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Deal Finder - Premium Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        
+        /* Dark Mode */
+        .dark {
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            color: #f7fafc;
+        }
+        .dark .bg-white { background-color: #2d3748 !important; }
+        .dark .text-gray-900 { color: #f7fafc !important; }
+        .dark .text-gray-600 { color: #cbd5e0 !important; }
+        .dark .border-gray-200 { border-color: #4a5568 !important; }
+        .dark .bg-gray-100 { background-color: #4a5568 !important; }
+        
+        [v-cloak] { display: none; }
+        
+        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .dark .glass-effect { background: rgba(45, 55, 72, 0.95); }
+        
+        .product-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .product-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
+        .dark .product-card:hover { box-shadow: 0 20px 25px -5px rgba(253,184,19,0.2), 0 10px 10px -5px rgba(253,184,19,0.1); }
+        
+        .gold-gradient { background: linear-gradient(135deg, #FDB813 0%, #FFB347 50%, #FDB813 100%); }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        /* Notifications */
+        .notification-enter-active, .notification-leave-active { transition: all 0.3s ease; }
+        .notification-enter, .notification-leave-to { opacity: 0; transform: translateX(20px); }
+        
+        /* Skeleton Loading */
+        .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+        .dark .skeleton { background: linear-gradient(90deg, #4a5568 25%, #718096 50%, #4a5568 75%); }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        /* Badge */
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 600; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .badge-gold { background: linear-gradient(135deg, #FDB813, #FFB347); color: white; }
+        
+        /* Tooltip */
+        .tooltip { position: relative; }
+        .tooltip:hover:after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); padding: 0.5rem 1rem; background: #2d3748; color: white; font-size: 0.75rem; border-radius: 0.375rem; white-space: nowrap; z-index: 50; }
+    </style>
+</head>
+<body :class="['bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50', darkModeClass]" >
+    <div id="app" class="min-h-screen transition-colors duration-300" v-cloak>
+        
+        <!-- ========== TOP NOTIFICATION BAR ========== -->
+        <div v-if="currentScanId" class="bg-gradient-to-r from-yellow-400 to-amber-500 text-white py-2 px-4 text-sm flex flex-wrap justify-between items-center">
+            <div class="flex items-center space-x-4 max-w-7xl mx-auto">
+                <i class="fas fa-sync-alt animate-spin-slow"></i>
+                <span>📊 Latest Scan: {{ scanTimeFormatted }} • ID: {{ currentScanId.substring(0, 8) }}</span>
+                <span class="flex items-center">
+                    <i class="fas fa-cube mr-1"></i>
+                    <strong>{{ allProducts.length }}</strong> products
+                </span>
+                <span class="flex items-center">
+                    <i class="fas fa-tags mr-1"></i>
+                    <strong>{{ uniquePurities.length }}</strong> purities
+                </span>
+                <span class="flex items-center">
+                    <i class="fas fa-store mr-1"></i>
+                    <strong>{{ uniqueSources.length }}</strong> sources
+                </span>
+            </div>
+        </div>
+
+        <!-- ========== NAVIGATION ========== -->
+        <nav :class="['glass-effect shadow-lg sticky top-0 z-50 border-b transition-colors duration-300', darkMode ? 'border-gray-700' : 'border-yellow-100']">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-20">
+                    
+                    <!-- Logo & Brand -->
+                    <div class="flex items-center space-x-4">
+                        <div class="gold-gradient p-3 rounded-2xl shadow-lg transform hover:scale-110 transition-transform">
+                            <i class="fas fa-coins text-white text-2xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center">
+                                Gold Deal Finder
+                                <span class="ml-3 badge badge-gold text-xs">PREMIUM</span>
+                            </h1>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                                <i class="fas fa-database mr-1"></i>
+                                Latest: {{ allProducts.length }} products • 
+                                <i class="fas fa-percent ml-2 mr-1 text-green-500"></i>
+                                Avg {{ averageDiscount }}% off
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="flex items-center space-x-3">
+                        
+                        <!-- Live Price -->
+                        <div class="hidden md:flex items-center space-x-2 bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-sm border dark:border-gray-700">
+                            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Gold</span>
+                            <span class="text-sm font-bold text-yellow-600 dark:text-yellow-400">
+                                {{ spotPrice ? '₹' + Math.round(spotPrice?.gold?.per_gram['999_landed']).toLocaleString() + '/g' : '...' }}
+                            </span>
+                        </div>
+                        
+                        <!-- Dark Mode Toggle -->
+                        <button @click="darkMode = !darkMode" 
+                                class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 p-2 rounded-lg border dark:border-gray-700 transition-all hover:scale-105 tooltip"
+                                :data-tooltip="darkMode ? 'Light Mode' : 'Dark Mode'">
+                            <i :class="darkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
+                        </button>
+                        
+                        <!-- Export Button -->
+                        <button @click="showExportModal = true" 
+                                class="hidden md:flex bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg items-center border dark:border-gray-700 transition-all hover:scale-105 tooltip"
+                                data-tooltip="Export Data">
+                            <i class="fas fa-download mr-2"></i>
+                            Export
+                        </button>
+                        
+                        <!-- Favorites Button -->
+                        <button @click="showFavoritesModal = true" 
+                                class="relative bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 p-2 rounded-lg border dark:border-gray-700 transition-all hover:scale-105">
+                            <i class="fas fa-star text-yellow-500"></i>
+                            <span v-if="favorites.length" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                {{ favorites.length }}
+                            </span>
+                        </button>
+                        
+                        <!-- Scan Button -->
+                        <button @click="showScanModal = true" :disabled="scanning"
+                                class="gold-gradient hover:opacity-90 text-white px-6 py-2 rounded-lg flex items-center shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-search mr-2" :class="{'fa-spin': scanning}"></i>
+                            {{ scanning ? 'Scanning...' : 'New Scan' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- ========== MAIN CONTENT ========== -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            
+            <!-- ========== ENHANCED STATS DASHBOARD ========== -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                
+                <!-- Card 1: Total Unique Products -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border-l-8 border-yellow-500 transform transition hover:scale-105">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                                <i class="fas fa-cubes mr-1 text-yellow-500"></i>
+                                UNIQUE PRODUCTS
+                            </p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ allProducts.length }}</p>
+                            <div class="flex items-center mt-3 space-x-2 flex-wrap">
+                                <span class="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded-full">
+                                    <i class="fas fa-gem mr-1"></i> {{ uniquePurities.length }} purities
+                                </span>
+                                <span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
+                                    <i class="fas fa-store mr-1"></i> {{ uniqueSources.length }} sources
+                                </span>
+                            </div>
+                        </div>
+                        <div class="bg-yellow-100 dark:bg-yellow-900 p-3 rounded-xl">
+                            <i class="fas fa-chart-pie text-yellow-600 dark:text-yellow-400 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 2: Total Value -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border-l-8 border-green-500 transform transition hover:scale-105">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                                <i class="fas fa-indian-rupee-sign mr-1 text-green-500"></i>
+                                TOTAL VALUE
+                            </p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(totalInventoryValue) }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                <i class="fas fa-weight-hanging mr-1"></i>
+                                Avg ₹{{ Math.round(averagePricePerGram) }}/g
+                            </p>
+                        </div>
+                        <div class="bg-green-100 dark:bg-green-900 p-3 rounded-xl">
+                            <i class="fas fa-coins text-green-600 dark:text-green-400 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 3: Good Deals -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border-l-8 border-blue-500 transform transition hover:scale-105">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                                <i class="fas fa-tag mr-1 text-blue-500"></i>
+                                GOOD DEALS (10%+)
+                            </p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ goodDealsCount }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                <i class="fas fa-percentage mr-1"></i>
+                                {{ ((goodDealsCount / allProducts.length * 100) || 0).toFixed(1) }}% of total
+                            </p>
+                        </div>
+                        <div class="bg-blue-100 dark:bg-blue-900 p-3 rounded-xl">
+                            <i class="fas fa-percent text-blue-600 dark:text-blue-400 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 4: Avg Discount -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border-l-8 border-purple-500 transform transition hover:scale-105">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                                <i class="fas fa-chart-line mr-1 text-purple-500"></i>
+                                AVG DISCOUNT
+                            </p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ averageDiscount }}%</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                <i class="fas fa-crown mr-1"></i>
+                                Best: {{ maxDiscount }}% OFF
+                            </p>
+                        </div>
+                        <div class="bg-purple-100 dark:bg-purple-900 p-3 rounded-xl">
+                            <i class="fas fa-chart-pie text-purple-600 dark:text-purple-400 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card 5: Sources -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border-l-8 border-orange-500 transform transition hover:scale-105">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                                <i class="fas fa-store mr-1 text-orange-500"></i>
+                                SOURCES
+                            </p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white">{{ uniqueSources.length }}</p>
+                            <div class="flex items-center mt-3 space-x-2">
+                                <span class="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-2 py-1 rounded-full">
+                                    <i class="fas fa-bolt mr-1"></i> AJIO: {{ allProducts.filter(p => p.source === 'AJIO').length }}
+                                </span>
+                                <span class="text-xs bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 px-2 py-1 rounded-full">
+                                    <i class="fas fa-shopping-bag mr-1"></i> Myntra: {{ allProducts.filter(p => p.source === 'Myntra').length }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="bg-orange-100 dark:bg-orange-900 p-3 rounded-xl">
+                            <i class="fas fa-store text-orange-600 dark:text-orange-400 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== CHARTS ROW ========== -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                            <i class="fas fa-chart-line text-yellow-500 mr-2"></i>
+                            Scan Activity (Last 7 Days)
+                        </h3>
+                        <span class="text-xs bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full text-gray-600 dark:text-gray-300">
+                            <i class="fas fa-history mr-1"></i> {{ scans.length }} scans
+                        </span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="scansChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                            <i class="fas fa-chart-pie text-yellow-500 mr-2"></i>
+                            Source Distribution
+                        </h3>
+                        <span class="text-xs bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full text-gray-600 dark:text-gray-300">
+                            <i class="fas fa-store mr-1"></i> {{ uniqueSources.length }} sources
+                        </span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== TABS ========== -->
+            <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+                <ul class="flex flex-wrap -mb-px text-sm font-medium text-center">
+                    <li class="mr-2">
+                        <button @click="activeTab = 'products'" 
+                                :class="{'border-yellow-500 text-yellow-600 dark:text-yellow-400': activeTab === 'products', 'border-transparent hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300': activeTab !== 'products'}"
+                                class="inline-flex items-center p-4 border-b-2 rounded-t-lg group">
+                            <i class="fas fa-box mr-2"></i>
+                            All Products
+                            <span class="ml-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full text-xs">{{ filteredProducts.total || 0 }}</span>
+                        </button>
+                    </li>
+                    <li class="mr-2">
+                        <button @click="activeTab = 'scans'" 
+                                :class="{'border-yellow-500 text-yellow-600 dark:text-yellow-400': activeTab === 'scans', 'border-transparent hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300': activeTab !== 'scans'}"
+                                class="inline-flex items-center p-4 border-b-2 rounded-t-lg group">
+                            <i class="fas fa-history mr-2"></i>
+                            Scan History
+                            <span class="ml-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full text-xs">{{ scans.length }}</span>
+                        </button>
+                    </li>
+                    <li class="mr-2">
+                        <button @click="activeTab = 'stats'" 
+                                :class="{'border-yellow-500 text-yellow-600 dark:text-yellow-400': activeTab === 'stats', 'border-transparent hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300': activeTab !== 'stats'}"
+                                class="inline-flex items-center p-4 border-b-2 rounded-t-lg group">
+                            <i class="fas fa-chart-bar mr-2"></i>
+                            Detailed Stats
+                        </button>
+                    </li>
+                    <li class="mr-2">
+                        <button @click="activeTab = 'timeline'" 
+                                :class="{'border-yellow-500 text-yellow-600 dark:text-yellow-400': activeTab === 'timeline', 'border-transparent hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300': activeTab !== 'timeline'}"
+                                class="inline-flex items-center p-4 border-b-2 rounded-t-lg group">
+                            <i class="fas fa-calendar-alt mr-2"></i>
+                            Timeline
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- ========== PRODUCTS TAB ========== -->
+            <div v-if="activeTab === 'products'">
+                
+                <!-- Active Filters Tags -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <span class="text-sm text-gray-600 dark:text-gray-400 mr-2 flex items-center">
+                        <i class="fas fa-filter mr-1"></i> Active Filters:
+                    </span>
+                    <span v-if="filters.source" class="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-3 py-1 rounded-full text-xs flex items-center">
+                        <i class="fas fa-store mr-1"></i> {{ filters.source }}
+                        <button @click="filters.source = ''" class="ml-2 hover:text-red-600">×</button>
+                    </span>
+                    <span v-if="filters.purity" class="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-3 py-1 rounded-full text-xs flex items-center">
+                        <i class="fas fa-gem mr-1"></i> {{ filters.purity }}
+                        <button @click="filters.purity = ''" class="ml-2 hover:text-red-600">×</button>
+                    </span>
+                    <span v-if="filters.min_discount > 0" class="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-xs flex items-center">
+                        <i class="fas fa-percent mr-1"></i> ≥{{ filters.min_discount }}%
+                        <button @click="filters.min_discount = -3" class="ml-2 hover:text-red-600">×</button>
+                    </span>
+                    <span v-if="filters.onlyFavorites" class="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-3 py-1 rounded-full text-xs flex items-center">
+                        <i class="fas fa-star mr-1"></i> Favorites only
+                        <button @click="filters.onlyFavorites = false" class="ml-2 hover:text-red-600">×</button>
+                    </span>
+                    <span v-if="filters.search" class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-xs flex items-center">
+                        <i class="fas fa-search mr-1"></i> "{{ filters.search }}"
+                        <button @click="filters.search = ''" class="ml-2 hover:text-red-600">×</button>
+                    </span>
+                    <span v-if="Object.values(filters).some(v => v !== '' && v !== -3 && v !== 100 && v !== 0 && v !== false)" 
+                          @click="resetFilters" 
+                          class="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-xs flex items-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+                        <i class="fas fa-undo mr-1"></i> Clear all
+                    </span>
+                </div>
+
+                <!-- Filters Grid -->
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <!-- Source Filter -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-store mr-1"></i> Source
+                            </label>
+                            <select v-model="filters.source" 
+                                    class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                <option value="">All Sources</option>
+                                <option v-for="source in uniqueSources" :value="source">{{ source }} ({{ allProducts.filter(p => p.source === source).length }})</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Purity Filter -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-gem mr-1"></i> Purity
+                            </label>
+                            <select v-model="filters.purity" 
+                                    class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                <option value="">All Purity</option>
+                                <option v-for="purity in uniquePurities" :value="purity">{{ purity }} ({{ allProducts.filter(p => p.purity === purity).length }})</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Min Discount -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-percent mr-1"></i> Min Discount
+                            </label>
+                            <select v-model.number="filters.min_discount" 
+                                    class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                <option value="-3">All (incl. negative)</option>
+                                <option value="0">0%+</option>
+                                <option value="5">5%+</option>
+                                <option value="10">10%+ 🔥</option>
+                                <option value="15">15%+ 🔥🔥</option>
+                                <option value="20">20%+ 🚀</option>
+                                <option value="25">25%+ ⭐</option>
+                                <option value="30">30%+ 💎</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Max Discount -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-percent mr-1"></i> Max Discount
+                            </label>
+                            <select v-model.number="filters.max_discount" 
+                                    class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                <option value="100">Any</option>
+                                <option value="10">≤10%</option>
+                                <option value="20">≤20%</option>
+                                <option value="30">≤30%</option>
+                                <option value="40">≤40%</option>
+                                <option value="50">≤50%</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Min Weight -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-weight-hanging mr-1"></i> Min Weight
+                            </label>
+                            <select v-model.number="filters.min_weight" 
+                                    class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                <option value="0">Any</option>
+                                <option value="1">1g+</option>
+                                <option value="2">2g+</option>
+                                <option value="5">5g+</option>
+                                <option value="8">8g+</option>
+                                <option value="10">10g+</option>
+                                <option value="20">20g+</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Search -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                                <i class="fas fa-search mr-1"></i> Search
+                            </label>
+                            <div class="relative">
+                                <input type="text" v-model="filters.search" 
+                                       placeholder="Product, brand..." 
+                                       class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500 pl-8">
+                                <i class="fas fa-search absolute left-2.5 top-2.5 text-gray-400 text-sm"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Filter Actions -->
+                    <div class="flex justify-between items-center mt-4 pt-4 border-t dark:border-gray-700">
+                        <div class="text-sm text-gray-600 dark:text-gray-400 flex items-center space-x-4">
+                            <span class="flex items-center">
+                                <i class="fas fa-cubes mr-1 text-yellow-500"></i>
+                                <strong>{{ filteredProducts.total }}</strong> products found
+                            </span>
+                            <span v-if="filteredFavoritesCount" class="flex items-center">
+                                <i class="fas fa-star mr-1 text-yellow-500"></i>
+                                {{ filteredFavoritesCount }} favorites
+                            </span>
+                        </div>
+                        
+                        <div class="flex items-center space-x-4">
+                            <!-- Favorites Toggle -->
+                            <button @click="filters.onlyFavorites = !filters.onlyFavorites" 
+                                    :class="filters.onlyFavorites ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'"
+                                    class="flex items-center text-sm transition-colors">
+                                <i class="fas fa-star mr-1"></i>
+                                Favorites only
+                            </button>
+                            
+                            <!-- Sort By -->
+                            <div class="flex items-center space-x-2">
+                                <span class="text-sm text-gray-600 dark:text-gray-400">Sort:</span>
+                                <select v-model="sortBy" 
+                                        class="border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm">
+                                    <option value="discount_percent">Discount</option>
+                                    <option value="price_per_gram">Price/g</option>
+                                    <option value="selling_price">Price</option>
+                                    <option value="weight_grams">Weight</option>
+                                    <option value="timestamp">Date</option>
+                                </select>
+                                <button @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                                        class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                                    <i class="fas" :class="sortOrder === 'desc' ? 'fa-sort-down' : 'fa-sort-up'"></i>
+                                </button>
+                            </div>
+                            
+                            <button @click="resetFilters" 
+                                    class="text-sm text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 flex items-center">
+                                <i class="fas fa-undo mr-1"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Products Grid -->
+                <div v-if="loadingProducts" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="i in 6" :key="i" class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4">
+                        <div class="skeleton h-48 rounded-lg mb-4"></div>
+                        <div class="skeleton h-4 w-3/4 mb-2"></div>
+                        <div class="skeleton h-4 w-1/2 mb-4"></div>
+                        <div class="skeleton h-8 w-full rounded-lg"></div>
+                    </div>
+                </div>
+                
+                <div v-else-if="paginatedProducts.length === 0" class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-12 text-center">
+                    <i class="fas fa-box-open text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                    <h3 class="text-xl font-bold text-gray-700 dark:text-gray-300 mb-2">No Products Found</h3>
+                    <p class="text-gray-500 dark:text-gray-400 mb-4">Try adjusting your filters or run a new scan</p>
+                    <button @click="resetFilters" class="gold-gradient text-white px-6 py-3 rounded-lg mr-3">
+                        <i class="fas fa-undo mr-2"></i> Clear Filters
+                    </button>
+                    <button @click="showScanModal = true" class="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-6 py-3 rounded-lg">
+                        <i class="fas fa-search mr-2"></i> New Scan
+                    </button>
+                </div>
+                
+                <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="product in paginatedProducts" :key="product.url + product.timestamp" 
+                         class="product-card bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+                        
+                        <!-- Product Image -->
+                        <div class="relative h-48 bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                            <img :src="product.image_url || 'https://placehold.co/400x400/FFD700/FFFFFF?text=Gold'" 
+                                 :alt="product.title"
+                                 class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                 @error="handleImageError">
+                            
+                            <!-- Discount Badge -->
+                            <span :class="'absolute top-4 right-4 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg ' + getDiscountClass(product.discount_percent)">
+                                <i class="fas fa-tag mr-1"></i>
+                                {{ product.discount_percent.toFixed(1) }}% OFF
+                            </span>
+                            
+                            <!-- Source Badge -->
+                            <span class="absolute top-4 left-4 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center">
+                                <i :class="'fas ' + getSourceIcon(product.source) + ' mr-1'"></i>
+                                {{ product.source }}
+                            </span>
+                            
+                            <!-- Favorite Button -->
+                            <button @click.stop="toggleFavorite(product)" 
+                                    class="absolute bottom-4 left-4 w-8 h-8 bg-white dark:bg-gray-900 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform">
+                                <i :class="isFavorite(product) ? 'fas fa-star text-yellow-500' : 'far fa-star text-gray-400'"></i>
+                            </button>
+                            
+                            <!-- Scan Date -->
+                            <span class="absolute bottom-4 right-4 bg-black bg-opacity-75 text-white px-3 py-1.5 rounded-full text-xs flex items-center">
+                                <i class="fas fa-clock mr-1"></i>
+                                {{ formatDate(product.timestamp) }}
+                            </span>
+                        </div>
+                        
+                        <!-- Product Info -->
+                        <div class="p-5">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs font-semibold flex items-center">
+                                    <i :class="'fas ' + getTypeIcon(product.product_type) + ' mr-1'"></i>
+                                    {{ product.purity }} • {{ product.weight_grams }}g
+                                </span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                    #{{ product.scan_id ? product.scan_id.substring(0, 6) : 'N/A' }}
+                                </span>
+                            </div>
+                            
+                            <h3 class="font-semibold text-gray-900 dark:text-white mb-2 line-clamp-2 h-12 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors">
+                                {{ product.title }}
+                            </h3>
+                            
+                            <div class="flex justify-between items-end mb-3">
+                                <div>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Selling Price</p>
+                                    <p class="text-xl font-bold text-green-600 dark:text-green-400">
+                                        ₹{{ product.selling_price.toLocaleString() }}
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Expected</p>
+                                    <p class="text-sm text-gray-400 dark:text-gray-500 line-through">
+                                        ₹{{ product.expected_price.toLocaleString() }}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-400 mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div class="text-center">
+                                    <span class="block font-bold text-gray-900 dark:text-white">₹{{ Math.round(product.price_per_gram).toLocaleString() }}</span>
+                                    <span class="text-gray-500 dark:text-gray-400">per gram</span>
+                                </div>
+                                <div class="text-center border-l border-gray-200 dark:border-gray-600">
+                                    <span class="block font-bold text-gray-900 dark:text-white">{{ product.making_charges_percent }}%</span>
+                                    <span class="text-gray-500 dark:text-gray-400">making</span>
+                                </div>
+                                <div class="text-center border-l border-gray-200 dark:border-gray-600">
+                                    <span class="block font-bold text-gray-900 dark:text-white truncate" :title="product.brand">{{ product.brand }}</span>
+                                    <span class="text-gray-500 dark:text-gray-400">brand</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex space-x-2">
+                                <a :href="product.url" target="_blank"
+                                   class="flex-1 gold-gradient text-white font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center text-sm hover:opacity-90 transition hover:scale-105">
+                                    <i class="fas fa-external-link-alt mr-2"></i>
+                                    View Deal
+                                </a>
+                                <button @click="setPriceAlert(product)" 
+                                        class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 p-2.5 rounded-lg transition hover:scale-105 tooltip"
+                                        data-tooltip="Set price alert">
+                                    <i class="fas fa-bell"></i>
+                                </button>
+                                <button @click="shareProduct(product)" 
+                                        class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 p-2.5 rounded-lg transition hover:scale-105 tooltip"
+                                        data-tooltip="Share">
+                                    <i class="fas fa-share-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div v-if="filteredProducts.total > 0" class="flex flex-col md:flex-row justify-between items-center mt-8 space-y-4 md:space-y-0">
+                    <div class="text-sm text-gray-600 dark:text-gray-400 flex items-center space-x-4">
+                        <span class="flex items-center">
+                            <i class="fas fa-cubes mr-1"></i>
+                            Showing <strong class="mx-1">{{ pageRange }}</strong> of <strong>{{ filteredProducts.total }}</strong> products
+                        </span>
+                        <span class="flex items-center">
+                            <i class="fas fa-arrow-left mr-1"></i>
+                            Page <strong class="mx-1">{{ currentPage }}</strong> of <strong>{{ totalPages }}</strong>
+                        </span>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <button @click="goToPage(1)" :disabled="currentPage === 1"
+                                class="px-3 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                :class="darkMode ? 'border-gray-700' : 'border-gray-300'">
+                            <i class="fas fa-angle-double-left"></i>
+                        </button>
+                        
+                        <button @click="prevPage" :disabled="currentPage === 1"
+                                class="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                :class="darkMode ? 'border-gray-700' : 'border-gray-300'">
+                            <i class="fas fa-chevron-left mr-2"></i> Previous
+                        </button>
+                        
+                        <div class="hidden md:flex space-x-1">
+                            <button v-for="page in Math.min(5, totalPages)" 
+                                    :key="page"
+                                    @click="goToPage(page)"
+                                    :class="[
+                                        'w-10 h-10 rounded-lg transition-colors',
+                                        currentPage === page 
+                                            ? 'bg-yellow-500 text-white' 
+                                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 border dark:border-gray-700'
+                                    ]">
+                                {{ page }}
+                            </button>
+                            <span v-if="totalPages > 5" class="px-2 flex items-center">...</span>
+                        </div>
+                        
+                        <button @click="nextPage" :disabled="currentPage === totalPages"
+                                class="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                :class="darkMode ? 'border-gray-700' : 'border-gray-300'">
+                            Next <i class="fas fa-chevron-right ml-2"></i>
+                        </button>
+                        
+                        <button @click="goToPage(totalPages)" :disabled="currentPage === totalPages"
+                                class="px-3 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                :class="darkMode ? 'border-gray-700' : 'border-gray-300'">
+                            <i class="fas fa-angle-double-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== SCAN HISTORY TAB ========== -->
+            <div v-if="activeTab === 'scans'" class="slide-in">
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                            <i class="fas fa-history mr-2 text-yellow-500"></i>
+                            Scan History
+                        </h3>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">Total: {{ scans.length }} scans</span>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead>
+                                <tr>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Scan ID</th>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date & Time</th>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Products</th>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Good Deals</th>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Avg Discount</th>
+                                    <th class="px-6 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                <tr v-for="scan in scans" :key="scan.scan_id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                        {{ scan.scan_id }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                                        {{ formatDateTime(scan.timestamp) }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                                        <span class="font-bold">{{ scan.total_products }}</span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                                              :class="scan.good_deals > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'">
+                                            {{ scan.good_deals }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                                        {{ scan.avg_discount }}%
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button @click="loadScanDetails(scan.scan_id)" 
+                                                class="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300 mr-3">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== STATS TAB ========== -->
+            <div v-if="activeTab === 'stats'" class="slide-in">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Source Distribution -->
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                            <i class="fas fa-store mr-2 text-yellow-500"></i>
+                            Source Distribution
+                        </h3>
+                        <div class="space-y-4">
+                            <div v-for="(count, source) in stats.historical?.source_distribution" :key="source"
+                                 class="flex items-center">
+                                <span class="w-24 text-sm text-gray-600 dark:text-gray-400">{{ source }}</span>
+                                <div class="flex-1 mx-4">
+                                    <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                        <div class="bg-yellow-500 h-2.5 rounded-full" 
+                                             :style="{ width: (count / stats.historical?.total_products_ever * 100) + '%' }"></div>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-bold text-gray-900 dark:text-white">{{ count }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                                    ({{ ((count / stats.historical?.total_products_ever * 100) || 0).toFixed(1) }}%)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Purity Distribution -->
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                            <i class="fas fa-gem mr-2 text-yellow-500"></i>
+                            Purity Distribution
+                        </h3>
+                        <div class="space-y-4">
+                            <div v-for="(count, purity) in stats.historical?.purity_distribution" :key="purity"
+                                 class="flex items-center">
+                                <span class="w-24 text-sm text-gray-600 dark:text-gray-400">{{ purity }}</span>
+                                <div class="flex-1 mx-4">
+                                    <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                        <div class="bg-purple-500 h-2.5 rounded-full" 
+                                             :style="{ width: (count / stats.historical?.total_products_ever * 100) + '%' }"></div>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-bold text-gray-900 dark:text-white">{{ count }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                                    ({{ ((count / stats.historical?.total_products_ever * 100) || 0).toFixed(1) }}%)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Best Deal Ever -->
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 lg:col-span-2">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                            <i class="fas fa-trophy mr-2 text-yellow-500"></i>
+                            Best Deal Ever Found
+                        </h3>
+                        <div v-if="stats.historical?.best_deal_ever" 
+                             class="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900 dark:to-orange-900 rounded-xl p-6 border border-yellow-200 dark:border-yellow-800">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <div class="flex items-center mb-2">
+                                        <span class="bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold mr-2">
+                                            {{ stats.historical.best_deal_ever.discount.toFixed(1) }}% OFF
+                                        </span>
+                                        <span class="text-sm text-gray-600 dark:text-gray-400">
+                                            {{ stats.historical.best_deal_ever.source }}
+                                        </span>
+                                    </div>
+                                    <h4 class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                                        {{ stats.historical.best_deal_ever.title }}
+                                    </h4>
+                                    <div class="grid grid-cols-3 gap-4 mt-4">
+                                        <div>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Weight</p>
+                                            <p class="font-bold text-gray-900 dark:text-white">{{ stats.historical.best_deal_ever.weight }}g</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Purity</p>
+                                            <p class="font-bold text-gray-900 dark:text-white">{{ stats.historical.best_deal_ever.purity }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Price</p>
+                                            <p class="font-bold text-gray-900 dark:text-white">₹{{ stats.historical.best_deal_ever.price.toLocaleString() }}</p>
+                                        </div>
+                                    </div>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">
+                                        Found on {{ formatDateTime(stats.historical.best_deal_ever.timestamp) }}
+                                    </p>
+                                </div>
+                                <div class="bg-yellow-100 dark:bg-yellow-800 p-4 rounded-full">
+                                    <i class="fas fa-crown text-3xl text-yellow-600 dark:text-yellow-400"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== TIMELINE TAB ========== -->
+            <div v-if="activeTab === 'timeline'" class="slide-in">
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                        <i class="fas fa-calendar-alt mr-2 text-yellow-500"></i>
+                        Scan Timeline
+                    </h3>
+                    <div class="chart-container" style="height: 400px;">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== NEW SCAN MODAL ========== -->
+        <div v-if="showScanModal" class="fixed inset-0 z-50 overflow-y-auto" @keydown.esc="showScanModal = false">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-80" @click="showScanModal = false"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 dark:bg-yellow-900 sm:mx-0 sm:h-10 sm:w-10">
+                                <i class="fas fa-search text-yellow-600 dark:text-yellow-400"></i>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                <h3 class="text-lg leading-6 font-bold text-gray-900 dark:text-white">
+                                    Start New Scan
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                                        This will scrape the latest gold products from AJIO and Myntra. The process may take 30-60 seconds.
+                                    </p>
+                                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                                        <i class="fas fa-info-circle mr-1"></i>
+                                        Last scan: {{ scanTimeFormatted }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button @click="startNewScan" :disabled="scanning"
+                                type="button"
+                                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 gold-gradient text-base font-medium text-white hover:opacity-90 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 transition-all">
+                            <i class="fas" :class="scanning ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+                            {{ scanning ? 'Scanning...' : 'Start Scan' }}
+                        </button>
+                        <button @click="showScanModal = false"
+                                type="button"
+                                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== EXPORT MODAL ========== -->
+        <div v-if="showExportModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-80" @click="showExportModal = false"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 sm:mx-0 sm:h-10 sm:w-10">
+                                <i class="fas fa-download text-green-600 dark:text-green-400"></i>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                <h3 class="text-lg leading-6 font-bold text-gray-900 dark:text-white">
+                                    Export Products
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                        Export {{ filteredProducts.total }} filtered products to your preferred format.
+                                    </p>
+                                    
+                                    <div class="flex space-x-4">
+                                        <label class="flex items-center space-x-2">
+                                            <input type="radio" v-model="exportFormat" value="csv" class="text-yellow-500">
+                                            <span class="text-sm text-gray-700 dark:text-gray-300">CSV</span>
+                                        </label>
+                                        <label class="flex items-center space-x-2">
+                                            <input type="radio" v-model="exportFormat" value="json" class="text-yellow-500">
+                                            <span class="text-sm text-gray-700 dark:text-gray-300">JSON</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button @click="exportData" :disabled="exporting"
+                                type="button"
+                                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 transition-all">
+                            <i class="fas" :class="exporting ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+                            {{ exporting ? 'Exporting...' : 'Export' }}
+                        </button>
+                        <button @click="showExportModal = false"
+                                type="button"
+                                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== FAVORITES MODAL ========== -->
+        <div v-if="showFavoritesModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-80" @click="showFavoritesModal = false"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6">
+                        <div class="flex justify-between items-start">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+                                <i class="fas fa-star text-yellow-500 mr-2"></i>
+                                Your Favorites ({{ favorites.length }})
+                            </h3>
+                            <button @click="showFavoritesModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="mt-4 max-h-96 overflow-y-auto">
+                            <div v-if="favoriteProducts.length === 0" class="text-center py-8">
+                                <i class="far fa-star text-5xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                                <p class="text-gray-500 dark:text-gray-400">No favorites yet. Click the star icon on products to add them.</p>
+                            </div>
+                            <div v-else class="space-y-3">
+                                <div v-for="item in favoriteProducts" :key="item.url" 
+                                     class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                    <div class="flex-1">
+                                        <p class="font-medium text-gray-900 dark:text-white">{{ item.title }}</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ item.purity }} • {{ item.weight_grams }}g • ₹{{ item.selling_price.toLocaleString() }} • {{ item.discount_percent }}% off
+                                        </p>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <a :href="item.url" target="_blank" 
+                                           class="text-yellow-600 hover:text-yellow-700 dark:text-yellow-400 p-2">
+                                            <i class="fas fa-external-link-alt"></i>
+                                        </a>
+                                        <button @click="toggleFavorite(item)" 
+                                                class="text-red-500 hover:text-red-600 p-2">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button @click="showFavoritesModal = false"
+                                type="button"
+                                class="w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none sm:w-auto sm:text-sm">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== PRICE ALERT MODAL ========== -->
+        <div v-if="showPriceAlertModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-80" @click="showPriceAlertModal = false"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 sm:mx-0 sm:h-10 sm:w-10">
+                                <i class="fas fa-bell text-red-600 dark:text-red-400"></i>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                <h3 class="text-lg leading-6 font-bold text-gray-900 dark:text-white">
+                                    Set Price Alert
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                        Get notified when this product drops below your target price.
+                                    </p>
+                                    
+                                    <div v-if="alertProduct" class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg mb-4">
+                                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ alertProduct.title }}</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Current price: ₹{{ alertProduct.selling_price.toLocaleString() }}</p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Target Price (₹)
+                                        </label>
+                                        <input type="number" v-model.number="alertPrice" 
+                                               class="w-full border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-yellow-500 focus:border-yellow-500">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button @click="savePriceAlert" 
+                                type="button"
+                                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm transition-all">
+                            <i class="fas fa-bell mr-2"></i>
+                            Set Alert
+                        </button>
+                        <button @click="showPriceAlertModal = false"
+                                type="button"
+                                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== PRODUCT DETAILS MODAL ========== -->
+        <div v-if="selectedProduct" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-80" @click="selectedProduct = null"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6">
+                        <div class="flex justify-between items-start">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Product Details</h3>
+                            <button @click="selectedProduct = null" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div v-if="selectedProduct" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Source</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ selectedProduct.source }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Brand</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ selectedProduct.brand }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Purity</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ selectedProduct.purity }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Weight</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ selectedProduct.weight_grams }}g</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Type</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ selectedProduct.product_type }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">Scan Date</p>
+                                    <p class="font-bold text-gray-900 dark:text-white">{{ formatDateTime(selectedProduct.timestamp) }}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                                <h4 class="font-bold text-gray-900 dark:text-white mb-2">Price Breakdown</h4>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Selling Price:</span>
+                                        <span class="font-bold text-green-600 dark:text-green-400">₹{{ selectedProduct.selling_price.toLocaleString() }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Expected Price:</span>
+                                        <span class="text-gray-400 dark:text-gray-500 line-through">₹{{ selectedProduct.expected_price.toLocaleString() }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Discount:</span>
+                                        <span :class="'font-bold ' + (selectedProduct.discount_percent > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')">
+                                            {{ selectedProduct.discount_percent.toFixed(1) }}%
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Price per gram:</span>
+                                        <span class="font-bold text-gray-900 dark:text-white">₹{{ Math.round(selectedProduct.price_per_gram).toLocaleString() }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Spot Price:</span>
+                                        <span class="text-gray-900 dark:text-white">₹{{ selectedProduct.spot_price }}/g</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">Making Charges:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ selectedProduct.making_charges_percent }}%</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600 dark:text-gray-400">GST:</span>
+                                        <span class="text-gray-900 dark:text-white">{{ selectedProduct.gst_percent }}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                                <a :href="selectedProduct.url" target="_blank"
+                                   class="w-full gold-gradient text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center hover:opacity-90 transition">
+                                    <i class="fas fa-external-link-alt mr-2"></i>
+                                    View on {{ selectedProduct.source }}
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== LOADING OVERLAY ========== -->
+        <div v-if="loading" class="fixed inset-0 bg-white dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-75 z-50 flex items-center justify-center">
+            <div class="text-center">
+                <div class="gold-gradient w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <i class="fas fa-coins text-white text-4xl"></i>
+                </div>
+                <p class="text-gray-700 dark:text-gray-300 font-medium">Loading data...</p>
+            </div>
+        </div>
+
+        <!-- ========== NOTIFICATIONS ========== -->
+        <div class="fixed top-4 right-4 z-50 space-y-2">
+            <div v-for="n in notifications" :key="n.id" 
+                 :class="[
+                     'px-6 py-3 rounded-lg shadow-lg animate__animated animate__fadeInRight flex items-center',
+                     n.type === 'success' ? 'bg-green-500 text-white' : 
+                     n.type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                 ]">
+                <i :class="[
+                    'fas mr-2',
+                    n.type === 'success' ? 'fa-check-circle' : 
+                    n.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'
+                ]"></i>
+                {{ n.message }}
+            </div>
+        </div>
+
+        <!-- ========== KEYBOARD SHORTCUTS HINT ========== -->
+        <div class="fixed bottom-4 right-4 z-50">
+            <button @click="showShortcuts = !showShortcuts" 
+                    class="bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-keyboard"></i>
+            </button>
+            <div v-if="showShortcuts" 
+                 class="absolute bottom-16 right-0 bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 w-64 border dark:border-gray-700">
+                <h4 class="font-bold mb-2 text-gray-900 dark:text-white flex items-center">
+                    <i class="fas fa-keyboard mr-2"></i> Keyboard Shortcuts
+                </h4>
+                <div class="space-y-2">
+                    <div v-for="shortcut in shortcutHints" :key="shortcut.key" 
+                         class="flex justify-between text-sm">
+                        <span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono text-xs">{{ shortcut.key }}</span>
+                        <span class="text-gray-600 dark:text-gray-400">{{ shortcut.action }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Vue.config.productionTip = false;
+    </script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

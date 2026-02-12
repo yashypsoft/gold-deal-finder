@@ -1,0 +1,14 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  gold-deal-finder:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./static:/app/static
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
