@@ -99,56 +99,39 @@ class GitHubActionsScanner:
             # Send individual alerts for good deals (if not test run)
             if good_deals and not self.test_run:
                 logger.info(f"Sending {len(good_deals)} deal alerts...")
-                for deal in good_deals:
-                    await self.bot.send_alert(deal)
-                    await asyncio.sleep(1)  # Rate limiting
+                await asyncio.gather(
+                    *(self.bot.send_alert(d) for d in good_deals)
+                )
                     
         except Exception as e:
             logger.error(f"Error sending Telegram summary: {e}")
     
     async def run_scan(self):
-        """Run one complete scanning cycle"""
         logger.info("🚀 Starting gold deal scan...")
         start_time = datetime.now()
-        
+
         try:
-            # Scrape products
-            all_products = self.scraper.scrape_all()
-            
-            # Filter good deals
+            # Run sources concurrently
+            all_products = await asyncio.to_thread(self.scraper.scrape_all)
+
             good_deals = self.filter_good_deals(all_products)
-            
-            # Calculate duration
+
             duration = (datetime.now() - start_time).total_seconds()
-            
-            # Log results
+
             logger.info(f"📊 Scan completed in {duration:.1f}s")
             logger.info(f"📦 Total products: {len(all_products)}")
             logger.info(f"🔥 Good deals: {len(good_deals)}")
-            
-            # Save results to file
+
             self.save_results(all_products, good_deals, duration)
-            
-            # Send Telegram summary (if not test run)
+
             if not self.test_run:
                 await self.send_telegram_summary(
                     len(all_products), good_deals, duration
                 )
-            
-            # Print top deals to console
-            if good_deals:
-                print("\n" + "="*60)
-                print("TOP DEALS FOUND:")
-                print("="*60)
-                for i, deal in enumerate(good_deals[:5], 1):
-                    print(f"\n{i}. {deal['source']} - {deal['discount_percent']:.1f}% OFF")
-                    print(f"   Product: {deal['title'][:60]}...")
-                    print(f"   Price: ₹{deal['selling_price']:,.0f} ({deal['weight_grams']}g {deal['purity']})")
-                    print(f"   Price/g: ₹{deal['price_per_gram']:,.0f}")
-                    print(f"   URL: {deal['url']}")
-            
+
             return len(good_deals)
-            
+
+
         except Exception as e:
             logger.error(f"❌ Scan failed: {e}")
             import traceback

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from config import AJIO_API_URL, SEARCH_PARAMS, REQUEST_DELAY
 from price_calculator import GoldPriceCalculator
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class GoldScraper:
     def __init__(self):
@@ -185,37 +186,47 @@ class GoldScraper:
             return 'jewellery'
     
     def scrape_ajio(self) -> List[Dict]:
-        """Scrape gold products from AJIO"""
+        print("🔄 Scraping AJIO...")
         products = []
-        params = SEARCH_PARAMS['ajio'].copy()
-        
-        try:
-            print("🔄 Scraping AJIO...")
-            
-            for page in range(1, 13):  # Scrape first 3 pages
-                params['currentPage'] = page
-                
-                response = requests.get(AJIO_API_URL, params=params, headers=self.ajio_headers, timeout=10)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    for product in data.get('products', []):
-                        product_info = self._parse_ajio_product(product)
-                        if product_info:
-                            products.append(product_info)
-                    
-                    print(f"   Page {page}: Found {len(data.get('products', []))} products")
-                else:
-                    print(f"   Page {page}: Failed with status {response.status_code}")
-                
-                time.sleep(REQUEST_DELAY)  # Respectful delay
-            
-            print(f"✅ AJIO: Found {len(products)} valid gold products")
-            
-        except Exception as e:
-            print(f"❌ Error scraping AJIO: {e}")
-        
+
+        def fetch_page(page: int):
+            params = SEARCH_PARAMS['ajio'].copy()
+            params['currentPage'] = page
+
+            try:
+                r = requests.get(
+                    AJIO_API_URL,
+                    params=params,
+                    headers=self.ajio_headers,
+                    timeout=10
+                )
+
+                if r.status_code != 200:
+                    print(f"Page {page} failed")
+                    return []
+
+                data = r.json()
+                page_products = []
+
+                for p in data.get("products", []):
+                    parsed = self._parse_ajio_product(p)
+                    if parsed:
+                        page_products.append(parsed)
+
+                print(f"Page {page}: {len(page_products)} valid")
+                return page_products
+
+            except Exception as e:
+                print(f"Page {page} error: {e}")
+                return []
+
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
+
+            for f in as_completed(futures):
+                products.extend(f.result())
+
+        print(f"✅ AJIO total: {len(products)}")
         return products
     
     def _parse_ajio_product(self, product: Dict) -> Optional[Dict]:
@@ -318,71 +329,60 @@ class GoldScraper:
             return None
     
     def scrape_myntra(self) -> List[Dict]:
-        """Scrape gold products from Myntra using proper session"""
+        print("🔄 Scraping Myntra...")
         products = []
-        
-        try:
-            print("🔄 Scraping Myntra...")
-            
-            # Create session with proper cookies
+
+        def fetch_page(page: int):
             session, base_headers = self.create_myntra_session()
-            
-            for page in range(1, 13):  # Scrape first 3 pages
-                params = {
-                    'rows': 50,
-                    'o': (49*(page-1))+1,
-                    'pincode': '384315'
-                }
-                
-                # Myntra requires specific headers for API
-                api_headers = {
-                    "User-Agent": base_headers["User-Agent"],
-                    "Accept": "application/json",
-                    "referer": "https://www.myntra.com/gold-coin",
-                    "x-meta-app": "channel=web",
-                    "x-myntraweb": "Yes",
-                    "x-requested-with": "browser"
-                }
-                
-                response = session.get(
+
+            params = {
+                "rows": 50,
+                "o": (49 * (page - 1)) + 1,
+                "pincode": "384315"
+            }
+
+            api_headers = {
+                "User-Agent": base_headers["User-Agent"],
+                "Accept": "application/json",
+                "referer": "https://www.myntra.com/gold-coin",
+                "x-meta-app": "channel=web",
+                "x-myntraweb": "Yes",
+                "x-requested-with": "browser"
+            }
+
+            try:
+                r = session.get(
                     "https://www.myntra.com/gateway/v4/search/gold-coin",
                     params=params,
                     headers=api_headers,
                     timeout=20
                 )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    products_data = data.get('products', [])
-                    
-                    # if page == 1 and products_data:
-                    #     print(f"DEBUG: First product keys: {list(products_data[0].keys())}")
-                    #     print(f"DEBUG: First product price type: {type(products_data[0].get('price'))}")
-                    #     print(f"DEBUG: First product price value: {products_data[0].get('price')}")
-                    
-                    for product in products_data:
-                        product_info = self._parse_myntra_product(product)
-                        if product_info:
-                            products.append(product_info)
-                    
-                    print(f"   Page {page}: Found {len(products_data)} products")
-                    
-                    # Stop if no more products
-                    if len(products_data) < 40:
-                        break
-                else:
-                    print(f"   Page {page}: Failed with status {response.status_code}")
-                    print(f"   Response: {response.text[:500]}")
-                
-                time.sleep(REQUEST_DELAY + random.uniform(1, 2))
-            
-            print(f"✅ Myntra: Found {len(products)} valid gold products")
-            
-        except Exception as e:
-            print(f"❌ Error scraping Myntra: {e}")
-            import traceback
-            traceback.print_exc()
-        
+
+                if r.status_code != 200:
+                    return []
+
+                data = r.json()
+                page_products = []
+
+                for p in data.get("products", []):
+                    parsed = self._parse_myntra_product(p)
+                    if parsed:
+                        page_products.append(parsed)
+
+                print(f"Page {page}: {len(page_products)} valid")
+                return page_products
+
+            except Exception as e:
+                print(f"Page {page} error: {e}")
+                return []
+
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
+
+            for f in as_completed(futures):
+                products.extend(f.result())
+
+        print(f"✅ Myntra total: {len(products)}")
         return products
     
     def _extract_myntra_price(self, price_data: Any) -> Tuple[float, float]:
@@ -524,18 +524,16 @@ class GoldScraper:
             return None
     
     def scrape_all(self) -> List[Dict]:
-        """Scrape all sources and return filtered products"""
-        all_products = []
-        
-        # Scrape both sources
-        ajio_products = self.scrape_ajio()
-        myntra_products = self.scrape_myntra()
-        
-        all_products.extend(ajio_products)
-        all_products.extend(myntra_products)
-        
-        print(f"\n📊 Total products found: {len(all_products)}")
-        
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            f1 = ex.submit(self.scrape_ajio)
+            f2 = ex.submit(self.scrape_myntra)
+
+            ajio_products = f1.result()
+            myntra_products = f2.result()
+
+        all_products = ajio_products + myntra_products
+        print(f"\n📊 Total products: {len(all_products)}")
+
         return all_products
 
     def scrape_all_with_cache(self, force_refresh=False):
