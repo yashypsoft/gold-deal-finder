@@ -1,25 +1,22 @@
-# Navigate to your project directory
-cd /Users/yashprajapati/YP-Projects/gold-deal-finder/
-
-# Make main.py executable
-chmod +x scanner.py
-
-# If main.py doesn't have shebang, add it at the top of main.py:
-# Add this as the first line: #!/usr/bin/env python3
-
 #!/bin/bash
-
-# Gold Deal Finder Runner
+# ─────────────────────────────────────────────
+# Gold Deal Finder Cron Runner
 # This script will be called by cron
+# ─────────────────────────────────────────────
 
 # Navigate to your project directory
-cd /Users/yashprajapati/YP-Projects/gold-deal-finder/
+cd /Users/yashprajapati/YP-Projects/gold-deal-finder || exit 1
 
-# Activate virtual environment (if you have one)
-source venv/bin/activate
+# Activate virtual environment
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+else
+    echo "$(date) - ERROR: venv not found" >> "$HOME/gold_scanner_cron.log"
+    exit 1
+fi
 
 # Run the scanner
-python scanner.py
+python scanner.py >> "$HOME/gold_scanner_cron.log" 2>&1
 
 # Log the execution
-echo "$(date): Gold scanner executed" >> ~/gold_scanner_cron.log
+echo "$(date) - Gold scanner executed" >> "$HOME/gold_scanner_cron.log"

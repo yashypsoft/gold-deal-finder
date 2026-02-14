@@ -298,7 +298,7 @@ try {
                                 total: this.allProducts.length,
                                 products: [...this.allProducts]
                             };
-                            
+                            this.applySorting();
                             console.log(`✅ Loaded ${this.allProducts.length} products from scan ${this.currentScanId}`);
                         }
                     }

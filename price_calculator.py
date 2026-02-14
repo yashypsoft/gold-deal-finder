@@ -101,10 +101,10 @@ class GoldPriceCalculator:
         """Fetch gold price from a specific API endpoint"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                # 'Accept': 'application/json',
             }
-            
+
             # Add custom headers if provided
             if 'headers' in endpoint_config:
                 headers.update(endpoint_config['headers'])
@@ -118,6 +118,9 @@ class GoldPriceCalculator:
                 params=params,
                 timeout=15
             )
+            # print(response.status_code)
+            # print(f"[RES] text={response.text[:500]}")
+
             
             # Check if response is valid
             if response.status_code != 200:
@@ -165,6 +168,7 @@ class GoldPriceCalculator:
         xau, xag = None, None
         for endpoint in self.API_ENDPOINTS:
             result = self._fetch_from_api(endpoint)
+            # print(result)
             if result:
                 xau, xag = result
                 break
@@ -246,7 +250,7 @@ class GoldPriceCalculator:
                 pass
         
         # Hardcoded fallback prices (based on recent averages)
-        gold_per_gram = 5800  # Conservative estimate
+        gold_per_gram = 7010.4176  # Conservative estimate
         
         # Calculate based on fallback
         spot_10g = gold_per_gram * 10
