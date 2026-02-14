@@ -20,7 +20,7 @@ console.log('🚀 Gold Deal Finder Premium loading...');
 try {
     window.app = new Vue({
         el: '#app',
-        
+
         data: {
             // ========== UI STATE ==========
             activeTab: 'products',
@@ -35,7 +35,7 @@ try {
             selectedProduct: null,
             darkMode: localStorage.getItem('darkMode') === 'true',
             sidebarCollapsed: false,
-            
+
             // ========== DATA ==========
             // Latest scan only - NO HISTORICAL MIX
             currentScanId: null,
@@ -62,10 +62,10 @@ try {
                 }
             },
             timeline: null,
-            
+
             // ========== FAVORITES ==========
             favorites: JSON.parse(localStorage.getItem('goldFavorites') || '[]'),
-            
+
             // ========== FILTERS ==========
             filters: {
                 source: '',
@@ -78,46 +78,46 @@ try {
                 inStock: false,
                 onlyFavorites: false
             },
-            
+
             // ========== PAGINATION (FIXED) ==========
             currentPage: 1,
             itemsPerPage: 12,
             pageSizeOptions: [12, 24, 48, 96],
             sortBy: 'discount_percent',
             sortOrder: 'desc',
-            
+
             // ========== CHARTS ==========
             scansChart: null,
             distributionChart: null,
             timelineChart: null,
             priceHistoryChart: null,
-            
+
             // ========== EXPORT ==========
             exportFormat: 'csv',
             exporting: false,
-            
+
             // ========== NOTIFICATIONS ==========
             notifications: [],
             notificationId: 0,
-            
+
             // ========== KEYBOARD SHORTCUTS ==========
             keysPressed: {},
-            
+
             // ========== PRICE ALERTS ==========
             priceAlerts: JSON.parse(localStorage.getItem('priceAlerts') || '[]'),
             showPriceAlertModal: false,
             alertProduct: null,
             alertPrice: null,
-            
+
             // ========== STATS ==========
             averagePricePerGram: 0,
             totalValue: 0,
             bestDeal: null,
-            
+
             // ========== DEBUG ==========
             debug: false
         },
-        
+
         // ========== COMPUTED ==========
         computed: {
             // ✅ FIXED: Pagination using latest scan only
@@ -127,12 +127,12 @@ try {
                 const end = start + this.itemsPerPage;
                 return this.filteredProducts.products.slice(start, end);
             },
-            
+
             // ✅ FIXED: Total pages based on filtered products count
             totalPages() {
                 return Math.ceil((this.filteredProducts.total || 0) / this.itemsPerPage);
             },
-            
+
             // Show page range (e.g., "1-12 of 145")
             pageRange() {
                 if (!this.filteredProducts.products?.length) return '0';
@@ -140,63 +140,63 @@ try {
                 const end = Math.min(start + this.itemsPerPage - 1, this.filteredProducts.total);
                 return `${start}-${end}`;
             },
-            
+
             // Unique filter options (from latest scan only)
             uniqueSources() {
                 if (!this.allProducts?.length) return [];
                 return [...new Set(this.allProducts.map(p => p.source).filter(Boolean))];
             },
-            
+
             uniquePurities() {
                 if (!this.allProducts?.length) return [];
                 return [...new Set(this.allProducts.map(p => p.purity).filter(Boolean))];
             },
-            
+
             uniqueBrands() {
                 if (!this.allProducts?.length) return [];
                 return [...new Set(this.allProducts.map(p => p.brand).filter(Boolean))].slice(0, 10);
             },
-            
+
             // Stats from latest scan
             totalProductsCount() {
                 return this.allProducts.length || 0;
             },
-            
+
             goodDealsCount() {
                 return this.allProducts.filter(p => (p.discount_percent || 0) >= 10).length;
             },
-            
+
             averageDiscount() {
                 if (!this.allProducts.length) return 0;
                 const sum = this.allProducts.reduce((acc, p) => acc + (p.discount_percent || 0), 0);
                 return (sum / this.allProducts.length).toFixed(1);
             },
-            
+
             maxDiscount() {
                 if (!this.allProducts.length) return 0;
                 return Math.max(...this.allProducts.map(p => p.discount_percent || 0));
             },
-            
+
             // Total value of all products
             totalInventoryValue() {
                 return this.allProducts.reduce((acc, p) => acc + (p.selling_price || 0), 0);
             },
-            
+
             // Favorites
             favoriteProducts() {
                 return this.allProducts.filter(p => this.favorites.includes(p.url));
             },
-            
+
             // Filtered favorites count
             filteredFavoritesCount() {
                 return this.filteredProducts.products?.filter(p => this.favorites.includes(p.url)).length || 0;
             },
-            
+
             // Dark mode class
             darkModeClass() {
                 return this.darkMode ? 'dark' : '';
             },
-            
+
             // Scan timestamp formatted
             scanTimeFormatted() {
                 if (!this.currentScanTimestamp) return 'Never';
@@ -209,7 +209,7 @@ try {
                     second: '2-digit'
                 });
             },
-            
+
             // Keyboard shortcut hints
             shortcutHints() {
                 return [
@@ -223,7 +223,7 @@ try {
                 ];
             }
         },
-        
+
         // ========== WATCHERS ==========
         watch: {
             filters: {
@@ -254,7 +254,7 @@ try {
                 deep: true
             }
         },
-        
+
         // ========== MOUNTED ==========
         mounted() {
             console.log('✅ Vue mounted - Loading latest scan only');
@@ -262,18 +262,18 @@ try {
             this.loadLatestScanOnly();
             this.setupAutoRefresh();
             this.loadSpotPriceHistory();
-            
+
             // Apply dark mode on load
             if (this.darkMode) {
                 document.documentElement.classList.add('dark');
             }
-            
+
             // Show welcome notification
             this.$nextTick(() => {
                 this.showNotification('success', '✨ Gold Deal Finder Premium loaded');
             });
         },
-        
+
         // ========== METHODS ==========
         methods: {
             // ========== ✅ FIXED: LOAD LATEST SCAN ONLY ==========
@@ -286,13 +286,13 @@ try {
                         const latestScan = scansRes.data[0];
                         this.currentScanId = latestScan.scan_id;
                         this.currentScanTimestamp = latestScan.timestamp;
-                        
+
                         // Load complete products from this scan only
                         const productsRes = await axios.get(`/api/v1/historical/scan/${this.currentScanId}`);
                         if (productsRes.data && productsRes.data.products) {
                             this.allProducts = productsRes.data.products;
                             this.latestProducts = this.allProducts.slice(0, 6);
-                            
+
                             // Initialize filtered products with all products
                             this.filteredProducts = {
                                 total: this.allProducts.length,
@@ -302,7 +302,7 @@ try {
                             console.log(`✅ Loaded ${this.allProducts.length} products from scan ${this.currentScanId}`);
                         }
                     }
-                    
+
                     // Load supporting data
                     await Promise.all([
                         this.fetchScans(), // Get last 5 scans for history
@@ -310,10 +310,10 @@ try {
                         this.fetchSpotPrice(),
                         this.fetchTimeline()
                     ]);
-                    
+
                     this.$nextTick(() => this.initCharts());
                     this.calculateStats();
-                    
+
                 } catch (error) {
                     console.error('Error loading latest scan:', error);
                     this.showNotification('error', 'Failed to load latest scan data');
@@ -321,90 +321,90 @@ try {
                     this.loading = false;
                 }
             },
-            
+
             // ========== ✅ FIXED: APPLY FILTERS ==========
             applyFilters() {
                 if (!this.allProducts.length) {
                     this.filteredProducts = { total: 0, products: [] };
                     return;
                 }
-                
+
                 let filtered = [...this.allProducts];
-                
+
                 // Source filter
                 if (this.filters.source) {
                     filtered = filtered.filter(p => p.source === this.filters.source);
                 }
-                
+
                 // Purity filter
                 if (this.filters.purity) {
                     filtered = filtered.filter(p => p.purity === this.filters.purity);
                 }
-                
+
                 // Discount range
-                filtered = filtered.filter(p => 
-                    p.discount_percent >= this.filters.min_discount && 
+                filtered = filtered.filter(p =>
+                    p.discount_percent >= this.filters.min_discount &&
                     p.discount_percent <= this.filters.max_discount
                 );
-                
+
                 // Weight range
-                filtered = filtered.filter(p => 
-                    p.weight_grams >= this.filters.min_weight && 
+                filtered = filtered.filter(p =>
+                    p.weight_grams >= this.filters.min_weight &&
                     p.weight_grams <= this.filters.max_weight
                 );
-                
+
                 // Search
                 if (this.filters.search) {
                     const searchLower = this.filters.search.toLowerCase();
-                    filtered = filtered.filter(p => 
+                    filtered = filtered.filter(p =>
                         p.title.toLowerCase().includes(searchLower) ||
                         p.brand.toLowerCase().includes(searchLower) ||
                         p.purity.toLowerCase().includes(searchLower)
                     );
                 }
-                
+
                 // In stock only
                 if (this.filters.inStock) {
                     filtered = filtered.filter(p => p.available !== false);
                 }
-                
+
                 // Favorites only
                 if (this.filters.onlyFavorites) {
                     filtered = filtered.filter(p => this.favorites.includes(p.url));
                 }
-                
+
                 // Update filtered products
                 this.filteredProducts = {
                     total: filtered.length,
                     products: filtered
                 };
-                
+
                 this.applySorting();
                 console.log(`🔍 Filtered: ${filtered.length} of ${this.allProducts.length} products`);
             },
-            
+
             // ========== ✅ FIXED: APPLY SORTING ==========
             applySorting() {
                 if (!this.filteredProducts.products?.length) return;
-                
+
                 const sortField = this.sortBy;
                 const sortMultiplier = this.sortOrder === 'desc' ? -1 : 1;
-                
+
                 this.filteredProducts.products.sort((a, b) => {
                     let valA = a[sortField] || 0;
                     let valB = b[sortField] || 0;
-                    
+
                     if (sortField === 'timestamp') {
                         valA = new Date(valA).getTime();
                         valB = new Date(valB).getTime();
                     }
-                    
+
                     if (valA < valB) return -1 * sortMultiplier;
                     if (valA > valB) return 1 * sortMultiplier;
                     return 0;
                 });
             },
-            
+
             // ========== FETCH SUPPORTING DATA ==========
             async fetchScans() {
                 try {
@@ -415,7 +415,7 @@ try {
                     this.scans = [];
                 }
             },
-            
+
             async fetchStats() {
                 try {
                     const res = await axios.get('/api/v1/stats/summary');
@@ -424,7 +424,7 @@ try {
                     console.error('Error fetching stats:', error);
                 }
             },
-            
+
             async fetchSpotPrice() {
                 try {
                     const res = await axios.get('/api/v1/spot-price');
@@ -433,7 +433,7 @@ try {
                     console.error('Error fetching spot price:', error);
                 }
             },
-            
+
             async fetchTimeline() {
                 try {
                     const res = await axios.get('/api/v1/historical/timeline?days=30');
@@ -443,7 +443,7 @@ try {
                     console.error('Error fetching timeline:', error);
                 }
             },
-            
+
             async loadSpotPriceHistory() {
                 // Simulate price history for demo
                 this.spotPriceHistory = Array.from({ length: 30 }, (_, i) => ({
@@ -451,17 +451,17 @@ try {
                     price: 5800 + Math.floor(Math.random() * 400)
                 }));
             },
-            
+
             // ========== STATS CALCULATION ==========
             calculateStats() {
                 if (!this.allProducts.length) return;
-                
+
                 this.averagePricePerGram = this.allProducts.reduce((acc, p) => acc + (p.price_per_gram || 0), 0) / this.allProducts.length;
                 this.totalValue = this.allProducts.reduce((acc, p) => acc + (p.selling_price || 0), 0);
-                this.bestDeal = this.allProducts.reduce((best, p) => 
+                this.bestDeal = this.allProducts.reduce((best, p) =>
                     (p.discount_percent || 0) > (best?.discount_percent || 0) ? p : best, null);
             },
-            
+
             // ========== FAVORITES ==========
             toggleFavorite(product) {
                 const index = this.favorites.indexOf(product.url);
@@ -473,24 +473,24 @@ try {
                     this.showNotification('info', 'Removed from favorites');
                 }
             },
-            
+
             isFavorite(product) {
                 return this.favorites.includes(product.url);
             },
-            
+
             // ========== EXPORT ==========
             async exportData() {
                 this.exporting = true;
                 try {
                     let data = this.filteredProducts.products;
                     let filename = `gold-deals-${new Date().toISOString().split('T')[0]}`;
-                    
+
                     if (this.exportFormat === 'csv') {
                         this.exportCSV(data, filename);
                     } else if (this.exportFormat === 'json') {
                         this.exportJSON(data, filename);
                     }
-                    
+
                     this.showNotification('success', `📊 Exported ${data.length} products`);
                     this.showExportModal = false;
                 } catch (error) {
@@ -500,7 +500,7 @@ try {
                     this.exporting = false;
                 }
             },
-            
+
             exportCSV(data, filename) {
                 const headers = ['Source', 'Brand', 'Title', 'Purity', 'Weight', 'Price', 'Discount', 'Price/g', 'URL'];
                 const rows = data.map(p => [
@@ -514,7 +514,7 @@ try {
                     p.price_per_gram,
                     p.url
                 ]);
-                
+
                 const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = URL.createObjectURL(blob);
@@ -524,7 +524,7 @@ try {
                 a.click();
                 URL.revokeObjectURL(url);
             },
-            
+
             exportJSON(data, filename) {
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -534,14 +534,14 @@ try {
                 a.click();
                 URL.revokeObjectURL(url);
             },
-            
+
             // ========== PRICE ALERTS ==========
             setPriceAlert(product) {
                 this.alertProduct = product;
                 this.alertPrice = Math.round(product.selling_price * 0.9); // 10% below current
                 this.showPriceAlertModal = true;
             },
-            
+
             savePriceAlert() {
                 const alert = {
                     id: Date.now(),
@@ -550,92 +550,92 @@ try {
                     createdAt: new Date().toISOString(),
                     active: true
                 };
-                
+
                 this.priceAlerts.push(alert);
                 localStorage.setItem('priceAlerts', JSON.stringify(this.priceAlerts));
                 this.showPriceAlertModal = false;
                 this.showNotification('success', `🔔 Alert set for ₹${this.alertPrice.toLocaleString()}`);
             },
-            
+
             removePriceAlert(alertId) {
                 this.priceAlerts = this.priceAlerts.filter(a => a.id !== alertId);
                 localStorage.setItem('priceAlerts', JSON.stringify(this.priceAlerts));
                 this.showNotification('info', 'Price alert removed');
             },
-            
+
             // ========== NOTIFICATIONS ==========
             showNotification(type, message, duration = 3000) {
                 const id = this.notificationId++;
                 const notification = { id, type, message };
-                
+
                 this.notifications.push(notification);
-                
+
                 setTimeout(() => {
                     const index = this.notifications.findIndex(n => n.id === id);
                     if (index !== -1) this.notifications.splice(index, 1);
                 }, duration);
             },
-            
+
             // ========== KEYBOARD SHORTCUTS ==========
             initKeyboardShortcuts() {
                 window.addEventListener('keydown', this.handleKeyDown);
                 window.addEventListener('keyup', this.handleKeyUp);
             },
-            
+
             handleKeyDown(e) {
                 this.keysPressed[e.key.toLowerCase()] = true;
-                
+
                 // Cmd+F or Ctrl+F: Focus search
                 if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
                     e.preventDefault();
                     this.focusSearch();
                 }
-                
+
                 // Cmd+R or Ctrl+R: Refresh
                 if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
                     e.preventDefault();
                     this.refreshData();
                 }
-                
+
                 // Cmd+N or Ctrl+N: New scan
                 if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
                     e.preventDefault();
                     this.showScanModal = true;
                 }
-                
+
                 // Cmd+D or Ctrl+D: Dark mode
                 if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
                     e.preventDefault();
                     this.darkMode = !this.darkMode;
                 }
-                
+
                 // Cmd+E or Ctrl+E: Export
                 if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
                     e.preventDefault();
                     this.showExportModal = true;
                 }
-                
+
                 // Cmd+, : Settings
                 if ((e.metaKey || e.ctrlKey) && e.key === ',') {
                     e.preventDefault();
                     this.showSettingsModal = true;
                 }
-                
+
                 // ESC: Close modals
                 if (e.key === 'Escape') {
                     this.closeAllModals();
                 }
             },
-            
+
             handleKeyUp(e) {
                 delete this.keysPressed[e.key.toLowerCase()];
             },
-            
+
             focusSearch() {
                 const searchInput = document.querySelector('input[placeholder*="Search"]');
                 if (searchInput) searchInput.focus();
             },
-            
+
             closeAllModals() {
                 this.showScanModal = false;
                 this.showExportModal = false;
@@ -645,48 +645,75 @@ try {
                 this.showPriceHistoryModal = false;
                 this.selectedProduct = null;
             },
-            
+
             // ========== PAGINATION CONTROLS ==========
             nextPage() {
                 if (this.currentPage < this.totalPages) {
                     this.currentPage++;
                 }
             },
-            
+
             prevPage() {
                 if (this.currentPage > 1) {
                     this.currentPage--;
                 }
             },
-            
+
             goToPage(page) {
                 if (page >= 1 && page <= this.totalPages) {
                     this.currentPage = page;
                 }
             },
-            
+
             // ========== SCAN ACTIONS ==========
             async startNewScan() {
+                if (this.scanning) return; // guard
+
                 this.scanning = true;
+
                 try {
-                    const res = await axios.get('/api/v1/scan');
-                    this.showNotification('success', `🔄 Scan started! Found ${res.data.total_count} products`);
+                    const res = await axios.get('/api/v1/scan', {
+                        timeout: 30000
+                    });
+
+                    const count = res?.data?.total_count ?? 0;
+
+                    this.showNotification(
+                        'success',
+                        `🔄 Scan started! Found ${count} products`
+                    );
+
                     this.showScanModal = false;
-                    
-                    // Reload latest scan after 3 seconds
+
+                    // delayed refresh
                     setTimeout(() => {
                         this.loadLatestScanOnly();
                         this.showNotification('success', '✨ Latest scan loaded');
                     }, 3000);
-                    
+
                 } catch (error) {
-                    console.error('Error starting scan:', error);
-                    this.showNotification('error', 'Failed to start scan');
+                    console.error('Scan error:', error);
+
+                    // cooldown handling
+                    if (error.response?.status === 429) {
+                        this.showNotification(
+                            'warning',
+                            error.response.data?.detail || 'Scan recently triggered. Try later.'
+                        );
+                        return;
+                    }
+
+                    // generic server message
+                    this.showNotification(
+                        'error',
+                        error.response?.detail || 'Failed to start scan'
+                    );
+
                 } finally {
                     this.scanning = false;
                 }
             },
-            
+
             async refreshData() {
                 this.loading = true;
                 try {
@@ -700,7 +727,7 @@ try {
                     this.loading = false;
                 }
             },
-            
+
             resetFilters() {
                 this.filters = {
                     source: '',
@@ -715,46 +742,46 @@ try {
                 };
                 this.showNotification('info', 'Filters reset');
             },
-            
+
             // ========== PRODUCT ACTIONS ==========
             viewProductDetails(product) {
                 this.selectedProduct = product;
             },
-            
+
             handleImageError(e) {
                 e.target.src = 'https://placehold.co/400x400/FFD700/FFFFFF?text=Gold';
             },
-            
+
             shareProduct(product) {
                 if (navigator.share) {
                     navigator.share({
                         title: product.title,
                         text: `💰 ${product.discount_percent}% off! ₹${product.selling_price.toLocaleString()}`,
                         url: product.url
-                    }).catch(() => {});
+                    }).catch(() => { });
                 } else {
                     navigator.clipboard.writeText(product.url);
                     this.showNotification('success', '📋 Link copied to clipboard');
                 }
             },
-            
+
             // ========== FORMATTING ==========
             formatCurrency(value) {
                 if (!value) return '₹0';
                 return `₹${value.toLocaleString('en-IN')}`;
             },
-            
+
             formatWeight(grams) {
                 if (grams >= 1000) {
                     return `${(grams / 1000).toFixed(2)}kg`;
                 }
                 return `${grams}g`;
             },
-            
+
             formatDiscount(discount) {
                 return `${discount.toFixed(1)}%`;
             },
-            
+
             formatDate(timestamp) {
                 if (!timestamp) return 'N/A';
                 try {
@@ -765,7 +792,7 @@ try {
                     return 'N/A';
                 }
             },
-            
+
             formatDateTime(timestamp) {
                 if (!timestamp) return 'N/A';
                 try {
@@ -777,7 +804,7 @@ try {
                     return 'N/A';
                 }
             },
-            
+
             // ========== STYLING ==========
             getDiscountClass(discount) {
                 if (discount >= 30) return 'bg-gradient-to-r from-red-500 to-pink-500 text-white';
@@ -786,7 +813,7 @@ try {
                 if (discount >= 5) return 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white';
                 return 'bg-gray-500 text-white';
             },
-            
+
             getSourceIcon(source) {
                 const icons = {
                     'AJIO': 'fa-bolt',
@@ -796,29 +823,29 @@ try {
                 };
                 return icons[source] || 'fa-store';
             },
-            
+
             getTypeIcon(type) {
                 return type === 'jewellery' ? 'fa-ring' : 'fa-coins';
             },
-            
+
             getWeightColor(weight) {
                 if (weight >= 20) return 'text-purple-600';
                 if (weight >= 10) return 'text-blue-600';
                 if (weight >= 5) return 'text-green-600';
                 return 'text-gray-600';
             },
-            
+
             // ========== CHARTS ==========
             initCharts() {
                 this.initScansChart();
                 this.initDistributionChart();
             },
-            
+
             initScansChart() {
                 const ctx = document.getElementById('scansChart');
                 if (!ctx || !this.scans?.length) return;
                 if (this.scansChart) this.scansChart.destroy();
-                
+
                 const recent = this.scans.slice(0, 7).reverse();
                 try {
                     this.scansChart = new Chart(ctx.getContext('2d'), {
@@ -865,23 +892,23 @@ try {
                     console.error('Chart error:', e);
                 }
             },
-            
+
             initDistributionChart() {
                 const ctx = document.getElementById('distributionChart');
                 if (!ctx) return;
                 if (this.distributionChart) this.distributionChart.destroy();
-                
+
                 // Use latest scan data instead of historical
                 const sources = {};
                 this.allProducts.forEach(p => {
                     sources[p.source] = (sources[p.source] || 0) + 1;
                 });
-                
+
                 const labels = Object.keys(sources);
                 const data = Object.values(sources);
-                
+
                 if (!labels.length) return;
-                
+
                 try {
                     this.distributionChart = new Chart(ctx.getContext('2d'), {
                         type: 'doughnut',
@@ -905,12 +932,12 @@ try {
                     console.error('Chart error:', e);
                 }
             },
-            
+
             updateTimelineChart() {
                 const ctx = document.getElementById('timelineChart');
                 if (!ctx || !this.timeline?.timeline) return;
                 if (this.timelineChart) this.timelineChart.destroy();
-                
+
                 const dates = Object.keys(this.timeline.timeline).sort().slice(-14);
                 try {
                     this.timelineChart = new Chart(ctx.getContext('2d'), {
@@ -956,18 +983,18 @@ try {
                     console.error('Chart error:', e);
                 }
             },
-            
+
             // ========== AUTO REFRESH ==========
             setupAutoRefresh() {
                 // Refresh spot price every 5 minutes
                 setInterval(() => this.fetchSpotPrice(), 5 * 60 * 1000);
-                
+
                 // Check for new scans every 10 minutes
                 setInterval(() => {
                     this.checkForNewScan();
                 }, 10 * 60 * 1000);
             },
-            
+
             async checkForNewScan() {
                 try {
                     const res = await axios.get('/api/v1/historical/scans?limit=1');
@@ -979,13 +1006,13 @@ try {
                     console.error('Error checking for new scan:', e);
                 }
             },
-            
+
             // ========== UTILITIES ==========
             copyToClipboard(text) {
                 navigator.clipboard.writeText(text);
                 this.showNotification('success', '📋 Copied to clipboard');
             },
-            
+
             getContrastColor(hexcolor) {
                 // Simple contrast calculator for badges
                 const r = parseInt(hexcolor.substr(1, 2), 16);
@@ -994,7 +1021,7 @@ try {
                 const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
                 return (yiq >= 128) ? 'text-gray-900' : 'text-white';
             },
-            
+
             // ========== DEBUG ==========
             toggleDebug() {
                 this.debug = !this.debug;
@@ -1008,9 +1035,9 @@ try {
             }
         }
     });
-    
+
     console.log('✅ Gold Deal Finder Premium ready!');
-    
+
 } catch (error) {
     console.error('❌ FATAL ERROR:', error);
     document.body.innerHTML += `<div style="padding: 20px; background: #ffebee; border: 2px solid #f44336; margin: 20px;">

@@ -29,7 +29,7 @@ AJIO_API_URL = "https://www.ajio.com/api/search"
 MYNTRA_API_URL = "https://www.myntra.com/gateway/v4/search"
 
 # GST Rate (for India)
-GST_RATE = 3  # 3% GST on gold
+GST_RATE = 0  # 3% GST on gold
 
 # Purity to karat mapping
 PURITY_MAPPING = {

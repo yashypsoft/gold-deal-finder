@@ -19,6 +19,7 @@ from collections import defaultdict
 from fastapi.responses import FileResponse
 
 
+
 from gold_scraper import GoldScraper
 from price_calculator import GoldPriceCalculator
 
@@ -465,36 +466,60 @@ async def get_scan_timeline(days: int = 30):
     set_cached_response(cache_key, response)
     return response
 
+SCAN_COOLDOWN = timedelta(minutes=30)
+last_scan_time: datetime | None = None
+scan_lock = asyncio.Lock()
+
+SCAN_COOLDOWN = timedelta(minutes=30)
+
+last_scan_time: datetime | None = None
+scan_lock = asyncio.Lock()
+
 @app.get("/api/v1/scan", response_model=Dict)
 async def scan_products(background_tasks: BackgroundTasks):
-    """Trigger a new scan for gold products"""
+    global last_scan_time, response_cache
+
+    async with scan_lock:
+        now = datetime.utcnow()
+
+        # cooldown check
+        if last_scan_time and (now - last_scan_time) < SCAN_COOLDOWN:
+            remaining = SCAN_COOLDOWN - (now - last_scan_time)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Scan already triggered. Try again in {int(remaining.total_seconds()//60)} min."
+            )
+
+        # mark immediately to prevent race
+        last_scan_time = now
+
     try:
         products = scraper.scrape_all()
-        
-        # Save results in background
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
         filename = f"data/scan_results_{timestamp}.json"
-        
+
         scan_data = {
-            'timestamp': datetime.now().isoformat(),
-            'total_products': len(products),
-            'products': products
+            "timestamp": now.isoformat(),
+            "total_products": len(products),
+            "products": products,
         }
-        
+
         background_tasks.add_task(save_results, filename, scan_data)
-        
-        # Clear cache
-        global response_cache
+
         response_cache = {}
-        
+
         return {
-            'success': True,
-            'message': f"Found {len(products)} gold products",
-            'scan_id': timestamp,
-            'total_count': len(products),
-            'timestamp': datetime.now().isoformat()
+            "success": True,
+            "message": f"Found {len(products)} gold products",
+            "scan_id": timestamp,
+            "total_count": len(products),
+            "timestamp": now.isoformat(),
         }
+
     except Exception as e:
+        # optional: reset last_scan_time on failure
+        # last_scan_time = None
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/spot-price")
