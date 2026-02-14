@@ -21,4 +21,4 @@ response = session.get(
     }
 )
 
-print(response.json())
+print(response.text)
