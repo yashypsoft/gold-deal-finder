@@ -66,14 +66,10 @@ class GoldScraper:
         # Extract purity
         purity = None
         purity_patterns = [
-            (r'24\s*kt|24\s*karat|999\s*(\D|$)', '24K'),
-            (r'22\s*kt|22\s*karat|916\s*(\D|$)', '22K'),
-            (r'18\s*kt|18\s*karat|750\s*(\D|$)', '18K'),
-            (r'14\s*kt|14\s*karat|585\s*(\D|$)', '14K'),
-            (r'24k', '24K'),
-            (r'22k', '22K'),
-            (r'18k', '18K'),
-            (r'14k', '14K'),
+            (r'24\s*kt|24\s*karat|999|24k', '24K'),
+            (r'22\s*kt|22\s*karat|916|22k', '22K'),
+            (r'18\s*kt|18\s*karat|750|18k', '18K'),
+            (r'14\s*kt|14\s*karat|585|14k', '14K'),
         ]
         
         for pattern, purity_value in purity_patterns:
@@ -81,40 +77,94 @@ class GoldScraper:
                 purity = purity_value
                 break
         
-        # Extract weight
-        weight = None
+        # SPECIAL CASE 1: Handle parentheses with plus signs (like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)")
+        # First, check if there's a weight outside parentheses and a sum inside parentheses
+        parentheses_pattern = r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)'
+        parentheses_match = re.search(parentheses_pattern, title_lower)
+        
+        if parentheses_match:
+            # We have a pattern like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
+            outside_weight = float(parentheses_match.group(1))
+            inside_content = parentheses_match.group(2)
+            
+            # Extract all weights from inside parentheses
+            inside_weights = re.findall(r'(\d+\.?\d*)\s*gm?', inside_content)
+            if inside_weights:
+                # Sum the inside weights
+                inside_sum = sum(float(w) for w in inside_weights)
+                
+                # If outside weight matches the sum, return the outside weight
+                if abs(outside_weight - inside_sum) < 0.01:
+                    return purity, outside_weight
+        
+        # SPECIAL CASE 2: Handle plus signs (these should ALWAYS be summed)
+        if '+' in title_lower:
+            parts = re.split(r'\s*\+\s*', title_lower)
+            plus_weights = []
+            
+            for part in parts:
+                weight_match = re.search(r'(\d+\.?\d*)\s*gm?', part)
+                if weight_match:
+                    try:
+                        weight = float(weight_match.group(1))
+                        if 0.001 <= weight <= 1000:
+                            plus_weights.append(weight)
+                    except:
+                        continue
+            
+            if plus_weights:
+                # Return the SUM of all weights found with plus signs
+                total_weight = sum(plus_weights)
+                return purity, total_weight
+        
+        # SPECIAL CASE 3: Handle hyphen pattern
+        hyphen_pattern = r'-\s*(\d+\.?\d*)\s*gm?'
+        hyphen_match = re.search(hyphen_pattern, title_lower)
+        if hyphen_match:
+            try:
+                weight = float(hyphen_match.group(1))
+                return purity, weight
+            except:
+                pass
+        
+        # SPECIAL CASE 4: Handle patterns where weight is explicitly stated first
+        # (like "4.5 Gm" at the beginning)
+        first_weight_pattern = r'^.*?(\d+\.?\d*)\s*gm?'
+        first_match = re.search(first_weight_pattern, title_lower)
+        
+        # Find all weights
         weight_patterns = [
             r'(\d+\.?\d*)\s*gm\b',
             r'(\d+\.?\d*)\s*gram\b',
-            r'(\d+\.?\d*)\s*g\b',
+            r'(\d+\.?\d*)\s*g\b(?!\w)',
             r'(\d+\.?\d*)\s*grams\b',
             r'(\d+\.?\d*)\s*gr\b',
-            r'(\d+)\s*gm',  # For whole numbers
         ]
         
+        all_weights = []
         for pattern in weight_patterns:
-            match = re.search(pattern, title_lower)
-            if match:
+            matches = re.finditer(pattern, title_lower)
+            for match in matches:
                 try:
-                    weight = float(match.group(1))
-                    break
+                    num_float = float(match.group(1))
+                    # Filter out purity numbers
+                    if num_float not in [24, 22, 18, 14, 999, 916, 750, 585]:
+                        if 0.001 <= num_float <= 1000:
+                            all_weights.append(num_float)
                 except:
                     continue
         
-        # If weight not found in patterns, try to find any number that could be weight
-        if weight is None:
-            numbers = re.findall(r'\d+\.?\d*', title)
-            for num in numbers:
-                try:
-                    num_float = float(num)
-                    # Check if it's a plausible weight (0.1g to 1000g)
-                    if 0.1 <= num_float <= 1000:
-                        weight = num_float
-                        break
-                except:
-                    continue
+        if all_weights:
+            # Check if all weights are the same
+            if all(w == all_weights[0] for w in all_weights):
+                # All weights are identical, return that weight
+                return purity, all_weights[0]
+            else:
+                # Different weights, sum them
+                return purity, sum(all_weights)
         
-        return purity, weight
+        return purity, None
+    
     
     def determine_product_type(self, title: str, description: str = "") -> str:
         """
@@ -142,7 +192,7 @@ class GoldScraper:
         try:
             print("🔄 Scraping AJIO...")
             
-            for page in range(1, 6):  # Scrape first 3 pages
+            for page in range(1, 13):  # Scrape first 3 pages
                 params['currentPage'] = page
                 
                 response = requests.get(AJIO_API_URL, params=params, headers=self.ajio_headers, timeout=10)
@@ -277,7 +327,7 @@ class GoldScraper:
             # Create session with proper cookies
             session, base_headers = self.create_myntra_session()
             
-            for page in range(1, 5):  # Scrape first 3 pages
+            for page in range(1, 13):  # Scrape first 3 pages
                 params = {
                     'rows': 50,
                     'o': (49*(page-1))+1,
