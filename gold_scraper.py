@@ -343,7 +343,7 @@ class GoldScraper:
 
             api_headers = {
                 "User-Agent": base_headers["User-Agent"],
-                "Accept": "application/json",
+                # "Accept": "application/json",
                 "referer": "https://www.myntra.com/gold-coin",
                 "x-meta-app": "channel=web",
                 "x-myntraweb": "Yes",
@@ -360,7 +360,9 @@ class GoldScraper:
 
                 if r.status_code != 200:
                     return []
-
+                print(f"Page {page} response:")
+                print(r.status_code)
+                print(r.text)  # Print first 200 characters of response text
                 data = r.json()
                 page_products = []
 
