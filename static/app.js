@@ -440,7 +440,7 @@
             async startNewScan() {
                 this.scanning = true;
                 try {
-                    const response = await axios.post('/api/v1/scan');
+                    const response = await axios.get('/api/v1/scan');
                     this.showScanModal = false;
                     this.showNotification('success', response.data?.message || 'Scan completed.');
                     await this.refreshDashboardData({ preserveSelection: false, clearCache: true });
