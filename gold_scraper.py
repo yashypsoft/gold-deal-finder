@@ -10,6 +10,26 @@ from price_calculator import GoldPriceCalculator
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+_EXCLUDE_PATTERNS = [
+    r'gold[- ]plated',
+    r'gold plated',
+    r'american diamond',
+    r'multi[- ]piece set',
+    r'\d+[- ]piece\s+(?:suit|spread|collar|set)',
+    r'embellished\s+\d+[- ]piece',
+    r'mangalsutra',
+    r'necklace',
+    r'lobster closure',
+    r'stone[- ]studded',
+    r'beaded multi',
+]
+_EXCLUDE_RE = re.compile('|'.join(_EXCLUDE_PATTERNS), re.IGNORECASE)
+ 
+ 
+def is_real_gold_product(title: str) -> bool:
+    """Return False for gold-plated / fashion / non-coin products."""
+    return not bool(_EXCLUDE_RE.search(title))
+
 class GoldScraper:
     def __init__(self):
         self.price_calculator = GoldPriceCalculator()
@@ -57,114 +77,208 @@ class GoldScraper:
         
         return s, base_headers
     
+    # def extract_purity_and_weight(self, title: str) -> Tuple[Optional[str], Optional[float]]:
+    #     """
+    #     Extract purity and weight from product title
+    #     Returns: (purity, weight_in_grams)
+    #     """
+    #     title_lower = title.lower()
+        
+    #     # Extract purity
+    #     purity = None
+    #     purity_patterns = [
+    #         (r'24\s*kt|24\s*karat|999|24k', '24K'),
+    #         (r'22\s*kt|22\s*karat|916|22k', '22K'),
+    #         (r'18\s*kt|18\s*karat|750|18k', '18K'),
+    #         (r'14\s*kt|14\s*karat|585|14k', '14K'),
+    #     ]
+        
+    #     for pattern, purity_value in purity_patterns:
+    #         if re.search(pattern, title_lower):
+    #             purity = purity_value
+    #             break
+        
+    #     # SPECIAL CASE 1: Handle parentheses with plus signs (like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)")
+    #     # First, check if there's a weight outside parentheses and a sum inside parentheses
+    #     parentheses_pattern = r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)'
+    #     parentheses_match = re.search(parentheses_pattern, title_lower)
+        
+    #     if parentheses_match:
+    #         # We have a pattern like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
+    #         outside_weight = float(parentheses_match.group(1))
+    #         inside_content = parentheses_match.group(2)
+            
+    #         # Extract all weights from inside parentheses
+    #         inside_weights = re.findall(r'(\d+\.?\d*)\s*gm?', inside_content)
+    #         if inside_weights:
+    #             # Sum the inside weights
+    #             inside_sum = sum(float(w) for w in inside_weights)
+                
+    #             # If outside weight matches the sum, return the outside weight
+    #             if abs(outside_weight - inside_sum) < 0.01:
+    #                 return purity, outside_weight
+        
+    #     # SPECIAL CASE 2: Handle plus signs (these should ALWAYS be summed)
+    #     if '+' in title_lower:
+    #         parts = re.split(r'\s*\+\s*', title_lower)
+    #         plus_weights = []
+            
+    #         for part in parts:
+    #             weight_match = re.search(r'(\d+\.?\d*)\s*gm?', part)
+    #             if weight_match:
+    #                 try:
+    #                     weight = float(weight_match.group(1))
+    #                     if 0.001 <= weight <= 1000:
+    #                         plus_weights.append(weight)
+    #                 except:
+    #                     continue
+            
+    #         if plus_weights:
+    #             # Return the SUM of all weights found with plus signs
+    #             total_weight = sum(plus_weights)
+    #             return purity, total_weight
+        
+    #     # SPECIAL CASE 3: Handle hyphen pattern
+    #     hyphen_pattern = r'-\s*(\d+\.?\d*)\s*gm?'
+    #     hyphen_match = re.search(hyphen_pattern, title_lower)
+    #     if hyphen_match:
+    #         try:
+    #             weight = float(hyphen_match.group(1))
+    #             return purity, weight
+    #         except:
+    #             pass
+        
+    #     # SPECIAL CASE 4: Handle patterns where weight is explicitly stated first
+    #     # (like "4.5 Gm" at the beginning)
+    #     first_weight_pattern = r'^.*?(\d+\.?\d*)\s*gm?'
+    #     first_match = re.search(first_weight_pattern, title_lower)
+        
+    #     # Find all weights
+    #     weight_patterns = [
+    #         r'(\d+\.?\d*)\s*gm\b',
+    #         r'(\d+\.?\d*)\s*gram\b',
+    #         r'(\d+\.?\d*)\s*g\b(?!\w)',
+    #         r'(\d+\.?\d*)\s*grams\b',
+    #         r'(\d+\.?\d*)\s*gr\b',
+    #     ]
+        
+    #     all_weights = []
+    #     for pattern in weight_patterns:
+    #         matches = re.finditer(pattern, title_lower)
+    #         for match in matches:
+    #             try:
+    #                 num_float = float(match.group(1))
+    #                 # Filter out purity numbers
+    #                 if num_float not in [24, 22, 18, 14, 999, 916, 750, 585]:
+    #                     if 0.001 <= num_float <= 1000:
+    #                         all_weights.append(num_float)
+    #             except:
+    #                 continue
+        
+    #     if all_weights:
+    #         # Check if all weights are the same
+    #         if all(w == all_weights[0] for w in all_weights):
+    #             # All weights are identical, return that weight
+    #             return purity, all_weights[0]
+    #         else:
+    #             # Different weights, sum them
+    #             return purity, sum(all_weights)
+        
+    #     return purity, None
     def extract_purity_and_weight(self, title: str) -> Tuple[Optional[str], Optional[float]]:
         """
-        Extract purity and weight from product title
+        Extract purity and weight from a gold product title.
         Returns: (purity, weight_in_grams)
+    
+        Purity can be None for items labelled 'Pure Gold' without explicit karat.
+        Weight can be None if no weight info is present in the title.
         """
         title_lower = title.lower()
-        
-        # Extract purity
+    
+        # Quick exclusion
+        if not is_real_gold_product(title):
+            return None, None
+    
+        # ── PURITY ───────────────────────────────────────────────────────────────
         purity = None
         purity_patterns = [
-            (r'24\s*kt|24\s*karat|999|24k', '24K'),
-            (r'22\s*kt|22\s*karat|916|22k', '22K'),
-            (r'18\s*kt|18\s*karat|750|18k', '18K'),
-            (r'14\s*kt|14\s*karat|585|14k', '14K'),
+            (r'24\s*kt|24\s*karat|\b999\b|24k', '24K'),
+            (r'22\s*kt|22\s*karat|\b916\b|22k', '22K'),
+            (r'18\s*kt|18\s*karat|\b750\b|18k', '18K'),
+            (r'14\s*kt|14\s*karat|\b585\b|14k', '14K'),
+            (r'\b995\b', '995'),
         ]
-        
         for pattern, purity_value in purity_patterns:
             if re.search(pattern, title_lower):
                 purity = purity_value
                 break
-        
-        # SPECIAL CASE 1: Handle parentheses with plus signs (like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)")
-        # First, check if there's a weight outside parentheses and a sum inside parentheses
-        parentheses_pattern = r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)'
-        parentheses_match = re.search(parentheses_pattern, title_lower)
-        
-        if parentheses_match:
-            # We have a pattern like "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
-            outside_weight = float(parentheses_match.group(1))
-            inside_content = parentheses_match.group(2)
-            
-            # Extract all weights from inside parentheses
-            inside_weights = re.findall(r'(\d+\.?\d*)\s*gm?', inside_content)
-            if inside_weights:
-                # Sum the inside weights
-                inside_sum = sum(float(w) for w in inside_weights)
-                
-                # If outside weight matches the sum, return the outside weight
-                if abs(outside_weight - inside_sum) < 0.01:
-                    return purity, outside_weight
-        
-        # SPECIAL CASE 2: Handle plus signs (these should ALWAYS be summed)
+    
+        # ── WEIGHT ───────────────────────────────────────────────────────────────
+        PURITY_NUMBERS = {24, 22, 18, 14, 999, 916, 750, 585, 995}
+    
+        def is_valid_weight(n: float) -> bool:
+            return n not in PURITY_NUMBERS and 0.001 <= n <= 10_000
+    
+        # CASE 1: "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
+        paren_match = re.search(r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)', title_lower)
+        if paren_match:
+            outside = float(paren_match.group(1))
+            inside_weights = [float(w) for w in re.findall(r'(\d+\.?\d*)\s*gm?', paren_match.group(2))]
+            if inside_weights and abs(outside - sum(inside_weights)) < 0.01:
+                return purity, outside
+    
+        # CASE 2: Plus sums  "0.5 Gm + 2 Gm + 2 Gm"
         if '+' in title_lower:
             parts = re.split(r'\s*\+\s*', title_lower)
             plus_weights = []
-            
             for part in parts:
-                weight_match = re.search(r'(\d+\.?\d*)\s*gm?', part)
-                if weight_match:
-                    try:
-                        weight = float(weight_match.group(1))
-                        if 0.001 <= weight <= 1000:
-                            plus_weights.append(weight)
-                    except:
-                        continue
-            
+                m = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', part)
+                if m:
+                    w = float(m.group(1))
+                    if is_valid_weight(w):
+                        plus_weights.append(w)
             if plus_weights:
-                # Return the SUM of all weights found with plus signs
-                total_weight = sum(plus_weights)
-                return purity, total_weight
-        
-        # SPECIAL CASE 3: Handle hyphen pattern
-        hyphen_pattern = r'-\s*(\d+\.?\d*)\s*gm?'
-        hyphen_match = re.search(hyphen_pattern, title_lower)
+                return purity, sum(plus_weights)
+    
+        # CASE 3: Hyphen before weight  "Coin-1gm"  "Coin- 0.500 gm"
+        hyphen_match = re.search(r'-\s*(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', title_lower)
         if hyphen_match:
-            try:
-                weight = float(hyphen_match.group(1))
-                return purity, weight
-            except:
-                pass
-        
-        # SPECIAL CASE 4: Handle patterns where weight is explicitly stated first
-        # (like "4.5 Gm" at the beginning)
-        first_weight_pattern = r'^.*?(\d+\.?\d*)\s*gm?'
-        first_match = re.search(first_weight_pattern, title_lower)
-        
-        # Find all weights
+            w = float(hyphen_match.group(1))
+            if is_valid_weight(w):
+                return purity, w
+    
+        # CASE 4: Milligrams  "100 Mg"
+        mg_match = re.search(r'(\d+\.?\d*)\s*mg\b', title_lower)
+        if mg_match:
+            w_mg = float(mg_match.group(1))
+            if 0.001 <= w_mg <= 10_000:
+                return purity, round(w_mg / 1000, 6)
+    
+        # CASE 5: General patterns
         weight_patterns = [
-            r'(\d+\.?\d*)\s*gm\b',
-            r'(\d+\.?\d*)\s*gram\b',
-            r'(\d+\.?\d*)\s*g\b(?!\w)',
-            r'(\d+\.?\d*)\s*grams\b',
-            r'(\d+\.?\d*)\s*gr\b',
+            r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b',   # "1 Gms", "5 Gram", "0.5 gm"
+            r'(\d+\.?\d*)\s*g(?!\w)',                      # "1G", "0.3g", "0.25G"
         ]
-        
         all_weights = []
-        for pattern in weight_patterns:
-            matches = re.finditer(pattern, title_lower)
-            for match in matches:
-                try:
-                    num_float = float(match.group(1))
-                    # Filter out purity numbers
-                    if num_float not in [24, 22, 18, 14, 999, 916, 750, 585]:
-                        if 0.001 <= num_float <= 1000:
-                            all_weights.append(num_float)
-                except:
+        seen_pos: set = set()
+        for pat in weight_patterns:
+            for m in re.finditer(pat, title_lower):
+                if m.start() in seen_pos:
                     continue
-        
+                try:
+                    w = float(m.group(1))
+                    if is_valid_weight(w):
+                        all_weights.append(w)
+                        seen_pos.add(m.start())
+                except ValueError:
+                    continue
+    
         if all_weights:
-            # Check if all weights are the same
             if all(w == all_weights[0] for w in all_weights):
-                # All weights are identical, return that weight
                 return purity, all_weights[0]
-            else:
-                # Different weights, sum them
-                return purity, sum(all_weights)
-        
-        return purity, None
+            return purity, sum(all_weights)
+    
+        return purity, 'None'
     
     
     def determine_product_type(self, title: str, description: str = "") -> str:
@@ -248,7 +362,7 @@ class GoldScraper:
             purity, weight = self.extract_purity_and_weight(title)
             
             if not purity or not weight:
-                print(product)
+                # print(product)
                 print('AJIO>Skipping invalid purity/weight product :', title)
                 return None
             
