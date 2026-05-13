@@ -219,66 +219,67 @@ class GoldScraper:
         def is_valid_weight(n: float) -> bool:
             return n not in PURITY_NUMBERS and 0.001 <= n <= 10_000
     
-        # CASE 1: "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
-        paren_match = re.search(r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)', title_lower)
-        if paren_match:
-            outside = float(paren_match.group(1))
-            inside_weights = [float(w) for w in re.findall(r'(\d+\.?\d*)\s*gm?', paren_match.group(2))]
-            if inside_weights and abs(outside - sum(inside_weights)) < 0.01:
-                return purity, outside
-    
-        # CASE 2: Plus sums  "0.5 Gm + 2 Gm + 2 Gm"
-        if '+' in title_lower:
-            parts = re.split(r'\s*\+\s*', title_lower)
-            plus_weights = []
-            for part in parts:
-                m = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', part)
-                if m:
-                    w = float(m.group(1))
-                    if is_valid_weight(w):
-                        plus_weights.append(w)
-            if plus_weights:
-                return purity, sum(plus_weights)
-    
-        # CASE 3: Hyphen before weight  "Coin-1gm"  "Coin- 0.500 gm"
-        hyphen_match = re.search(r'-\s*(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', title_lower)
-        if hyphen_match:
-            w = float(hyphen_match.group(1))
-            if is_valid_weight(w):
-                return purity, w
-    
-        # CASE 4: Milligrams  "100 Mg"
-        mg_match = re.search(r'(\d+\.?\d*)\s*mg\b', title_lower)
-        if mg_match:
-            w_mg = float(mg_match.group(1))
-            if 0.001 <= w_mg <= 10_000:
-                return purity, round(w_mg / 1000, 6)
-    
-        # CASE 5: General patterns
+        # Collect all weights with their positions
         weight_patterns = [
             r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b',   # "1 Gms", "5 Gram", "0.5 gm"
             r'(\d+\.?\d*)\s*g(?!\w)',                      # "1G", "0.3g", "0.25G"
         ]
-        all_weights = []
-        seen_pos: set = set()
+        
+        weights_with_pos = []
+        seen_start_pos: set = set()
+        
         for pat in weight_patterns:
             for m in re.finditer(pat, title_lower):
-                if m.start() in seen_pos:
+                if m.start() in seen_start_pos:
                     continue
                 try:
                     w = float(m.group(1))
                     if is_valid_weight(w):
-                        all_weights.append(w)
-                        seen_pos.add(m.start())
+                        weights_with_pos.append((m.start(), w))
+                        seen_start_pos.add(m.start())
                 except ValueError:
                     continue
+        
+        # Sort by position
+        weights_with_pos.sort()
+        all_weights = [w for pos, w in weights_with_pos]
     
-        if all_weights:
-            if all(w == all_weights[0] for w in all_weights):
-                return purity, all_weights[0]
-            return purity, sum(all_weights)
+        if not all_weights:
+            # Check for milligrams as fallback
+            mg_match = re.search(r'(\d+\.?\d*)\s*mg\b', title_lower)
+            if mg_match:
+                w_mg = float(mg_match.group(1))
+                if 0.001 <= w_mg <= 10_000:
+                    return purity, round(w_mg / 1000, 6)
+            return purity, None
     
-        return purity, 'None'
+        if len(all_weights) == 1:
+            return purity, all_weights[0]
+    
+        # Multiple weights found - intelligently decide whether to sum or take total
+        first_w = all_weights[0]
+        first_pos = weights_with_pos[0][0]
+        others = all_weights[1:]
+        
+        # CASE 1: First weight is the sum of others (e.g. "4gm (2gm+2gm)")
+        if len(others) >= 2 and abs(first_w - sum(others)) < 0.01:
+            return purity, first_w
+        
+        # CASE 2: First weight is early and strictly greater than others (e.g. "4gm ... (2gm x 2)")
+        if first_pos < 25 and first_w > max(others) and (re.search(r'\b(x|set of|pack of)\b', title_lower) or '(' in title_lower):
+            return purity, first_w
+    
+        # CASE 3: All weights are the same
+        if all(w == first_w for w in all_weights):
+            # Sum only if there's an explicit addition indicator
+            if '+' in title_lower or re.search(r'\b(plus|and)\b', title_lower):
+                return purity, sum(all_weights)
+            # Otherwise it's likely just repeating the same weight
+            return purity, first_w
+    
+        # Default: sum them (handles "1gm + 2gm" etc)
+        return purity, sum(all_weights)
+
     
     
     def determine_product_type(self, title: str, description: str = "") -> str:
