@@ -66,6 +66,8 @@
             },
 
             filters: cloneFilters(),
+            debouncedSearch: '',
+            searchTimeout: null,
             currentPage: 1,
             itemsPerPage: 12,
             pageSizeOptions: [12, 24, 48],
@@ -100,8 +102,8 @@
                 if (this.filters.purity) {
                     products = products.filter((product) => product.purity === this.filters.purity);
                 }
-                if (this.filters.search) {
-                    const term = this.filters.search.toLowerCase();
+                if (this.debouncedSearch) {
+                    const term = this.debouncedSearch.toLowerCase();
                     products = products.filter((product) => {
                         return [product.title, product.brand, product.source, product.purity]
                             .filter(Boolean)
@@ -261,6 +263,12 @@
         },
 
         watch: {
+            'filters.search': function(val) {
+                if (this.searchTimeout) clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.debouncedSearch = val;
+                }, 250);
+            },
             filters: {
                 handler() {
                     this.currentPage = 1;
@@ -317,6 +325,12 @@
         },
 
         methods: {
+            scheduleChartRender() {
+                if (this._chartTimeout) clearTimeout(this._chartTimeout);
+                this._chartTimeout = setTimeout(() => {
+                    this.renderCharts();
+                }, 100);
+            },
             async boot() {
                 this.loading = true;
                 this.bootError = '';

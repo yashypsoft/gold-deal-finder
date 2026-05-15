@@ -2,749 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Gold Deal Finder - Find the best deals on gold coins and bullion.">
     <title>Gold Deal Finder</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #f6efe2;
-            --bg-soft: rgba(255, 250, 241, 0.84);
-            --surface: rgba(255, 252, 247, 0.82);
-            --surface-strong: rgba(255, 249, 238, 0.95);
-            --line: rgba(97, 73, 33, 0.12);
-            --text: #2f2417;
-            --muted: #6c5940;
-            --accent: #c99a3f;
-            --accent-deep: #8f6422;
-            --accent-soft: rgba(201, 154, 63, 0.14);
-            --positive: #2f6c57;
-            --negative: #8b4c36;
-            --shadow: 0 30px 80px rgba(92, 67, 28, 0.12);
-        }
-
-        :root.dark {
-            --bg: #101216;
-            --bg-soft: rgba(18, 22, 28, 0.84);
-            --surface: rgba(20, 25, 31, 0.86);
-            --surface-strong: rgba(22, 28, 35, 0.94);
-            --line: rgba(247, 236, 214, 0.08);
-            --text: #f7f0e1;
-            --muted: #c7bda9;
-            --accent: #e1b45d;
-            --accent-deep: #f4d18b;
-            --accent-soft: rgba(225, 180, 93, 0.16);
-            --positive: #79c4ad;
-            --negative: #d68b69;
-            --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        [v-cloak] {
-            display: none;
-        }
-
-        html,
-        body {
-            min-height: 100%;
-            margin: 0;
-            background:
-                radial-gradient(circle at top left, rgba(209, 163, 86, 0.2), transparent 26%),
-                radial-gradient(circle at top right, rgba(110, 80, 34, 0.09), transparent 22%),
-                linear-gradient(180deg, rgba(255,255,255,0.36), transparent 30%),
-                var(--bg);
-            color: var(--text);
-            font-family: 'Manrope', sans-serif;
-            transition: background 0.35s ease, color 0.35s ease;
-        }
-
-        body {
-            overflow-x: hidden;
-        }
-
-        .display-font {
-            font-family: 'Cormorant Garamond', serif;
-            letter-spacing: -0.02em;
-        }
-
-        .app-shell {
-            position: relative;
-            min-height: 100vh;
-            padding-bottom: 5rem;
-        }
-
-        .ornament {
-            position: fixed;
-            border-radius: 999px;
-            filter: blur(18px);
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0.55;
-        }
-
-        .ornament.one {
-            top: -4rem;
-            left: -2rem;
-            width: 16rem;
-            height: 16rem;
-            background: rgba(212, 169, 86, 0.18);
-        }
-
-        .ornament.two {
-            top: 20rem;
-            right: -4rem;
-            width: 18rem;
-            height: 18rem;
-            background: rgba(95, 75, 40, 0.12);
-        }
-
-        .ornament.three {
-            bottom: -4rem;
-            left: 30%;
-            width: 14rem;
-            height: 14rem;
-            background: rgba(42, 90, 110, 0.1);
-        }
-
-        .shell-width {
-            position: relative;
-            z-index: 1;
-            max-width: 1320px;
-            margin: 0 auto;
-            padding: 1.25rem;
-        }
-
-        .surface,
-        .surface-strong,
-        .metric-card,
-        .chart-shell,
-        .scan-card,
-        .product-card,
-        .toolbar-card,
-        .modal-card,
-        .drawer {
-            border: 1px solid var(--line);
-            backdrop-filter: blur(16px);
-            box-shadow: var(--shadow);
-        }
-
-        .surface {
-            background: var(--surface);
-            border-radius: 28px;
-        }
-
-        .surface-strong,
-        .toolbar-card,
-        .metric-card,
-        .chart-shell,
-        .scan-card,
-        .product-card,
-        .modal-card,
-        .drawer {
-            background: var(--surface-strong);
-            border-radius: 24px;
-        }
-
-        .topbar {
-            position: sticky;
-            top: 0;
-            z-index: 30;
-            padding-top: 0.75rem;
-        }
-
-        .topbar-inner {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 1rem 1.25rem;
-        }
-
-        .brand-mark {
-            display: grid;
-            place-items: center;
-            width: 3rem;
-            height: 3rem;
-            border-radius: 18px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-            color: white;
-            box-shadow: 0 18px 36px rgba(139, 102, 31, 0.24);
-        }
-
-        .kicker {
-            text-transform: uppercase;
-            letter-spacing: 0.18em;
-            font-size: 0.7rem;
-            color: var(--muted);
-        }
-
-        .hero {
-            padding: 1.4rem;
-        }
-
-        .hero-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
-            gap: 1rem;
-        }
-
-        .hero-panel {
-            padding: 1.5rem;
-            border-radius: 24px;
-            background:
-                linear-gradient(135deg, rgba(255, 251, 242, 0.9), rgba(245, 232, 205, 0.5)),
-                var(--surface-strong);
-            border: 1px solid rgba(193, 149, 73, 0.18);
-        }
-
-        :root.dark .hero-panel {
-            background:
-                linear-gradient(135deg, rgba(38, 30, 19, 0.5), rgba(27, 32, 38, 0.92)),
-                var(--surface-strong);
-        }
-
-        .hero-aside {
-            display: grid;
-            gap: 0.85rem;
-        }
-
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.55rem;
-            padding: 0.55rem 0.9rem;
-            border-radius: 999px;
-            background: var(--accent-soft);
-            color: var(--accent-deep);
-            font-weight: 700;
-            font-size: 0.78rem;
-        }
-
-        .pill.neutral {
-            background: rgba(61, 49, 34, 0.06);
-            color: var(--muted);
-        }
-
-        :root.dark .pill.neutral {
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .btn-primary,
-        .btn-secondary,
-        .btn-ghost,
-        .icon-btn,
-        .tab-btn {
-            border: 0;
-            cursor: pointer;
-            transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
-        }
-
-        .btn-primary,
-        .btn-secondary,
-        .btn-ghost,
-        .icon-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.55rem;
-            min-height: 44px;
-            padding: 0.8rem 1.05rem;
-            border-radius: 16px;
-            font-weight: 700;
-        }
-
-        .btn-primary {
-            color: white;
-            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-        }
-
-        .btn-secondary {
-            color: var(--text);
-            background: rgba(255, 255, 255, 0.52);
-            border: 1px solid var(--line);
-        }
-
-        :root.dark .btn-secondary {
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .btn-ghost,
-        .icon-btn,
-        .tab-btn {
-            color: var(--text);
-            background: transparent;
-        }
-
-        .btn-primary:hover,
-        .btn-secondary:hover,
-        .btn-ghost:hover,
-        .icon-btn:hover,
-        .tab-btn:hover {
-            transform: translateY(-1px);
-        }
-
-        .metric-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .metric-card {
-            padding: 1.2rem;
-        }
-
-        .metric-label {
-            font-size: 0.76rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: var(--muted);
-        }
-
-        .metric-value {
-            margin-top: 0.75rem;
-            font-size: 1.8rem;
-            font-weight: 800;
-            line-height: 1;
-        }
-
-        .metric-subtext {
-            margin-top: 0.65rem;
-            color: var(--muted);
-            font-size: 0.9rem;
-        }
-
-        .banner {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            margin-top: 1rem;
-            padding: 1rem 1.2rem;
-            border-radius: 20px;
-            background: rgba(61, 106, 128, 0.12);
-            border: 1px solid rgba(61, 106, 128, 0.14);
-        }
-
-        .tab-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            padding: 0.5rem;
-            margin-bottom: 1rem;
-            border-radius: 22px;
-            background: rgba(255, 255, 255, 0.36);
-            border: 1px solid var(--line);
-        }
-
-        :root.dark .tab-row {
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .tab-btn {
-            min-height: 42px;
-            padding: 0.75rem 1rem;
-            border-radius: 16px;
-            font-weight: 700;
-            color: var(--muted);
-        }
-
-        .tab-btn.active {
-            background: var(--surface-strong);
-            color: var(--text);
-            box-shadow: inset 0 0 0 1px rgba(209, 163, 86, 0.16);
-        }
-
-        .toolbar-card {
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .toolbar-grid {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 0.85rem;
-        }
-
-        .field-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.75rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--muted);
-        }
-
-        .input-field,
-        .select-field {
-            width: 100%;
-            min-height: 46px;
-            padding: 0.85rem 0.95rem;
-            border-radius: 15px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.54);
-            color: var(--text);
-            outline: none;
-        }
-
-        :root.dark .input-field,
-        :root.dark .select-field {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.55rem;
-            margin-bottom: 1rem;
-        }
-
-        .chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            border-radius: 999px;
-            padding: 0.5rem 0.75rem;
-            background: rgba(201, 154, 63, 0.12);
-            color: var(--accent-deep);
-            font-size: 0.78rem;
-            font-weight: 700;
-        }
-
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 1rem;
-        }
-
-        .product-card {
-            overflow: hidden;
-        }
-
-        .product-media {
-            position: relative;
-            height: 220px;
-            overflow: hidden;
-            background: linear-gradient(135deg, rgba(220, 184, 114, 0.24), rgba(255, 255, 255, 0.25));
-        }
-
-        .product-media img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .product-body {
-            padding: 1rem;
-        }
-
-        .product-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin: 0.75rem 0;
-        }
-
-        .meta-badge {
-            padding: 0.4rem 0.65rem;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            background: rgba(61, 49, 34, 0.06);
-            color: var(--muted);
-        }
-
-        .tone-positive {
-            color: var(--positive);
-        }
-
-        .tone-negative {
-            color: var(--negative);
-        }
-
-        .chart-grid,
-        .insight-grid,
-        .scan-grid,
-        .preview-grid {
-            display: grid;
-            gap: 1rem;
-        }
-
-        .chart-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .chart-shell {
-            padding: 1rem;
-        }
-
-        .chart-canvas {
-            position: relative;
-            height: 320px;
-        }
-
-        .insight-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            margin-bottom: 1rem;
-        }
-
-        .scan-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .scan-card {
-            padding: 1.05rem;
-        }
-
-        .scan-card.active {
-            border-color: rgba(201, 154, 63, 0.42);
-            box-shadow: 0 20px 40px rgba(165, 120, 44, 0.18);
-        }
-
-        .preview-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .mini-card {
-            padding: 0.9rem;
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.38);
-            border: 1px solid var(--line);
-        }
-
-        :root.dark .mini-card {
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .empty-state,
-        .alert-card {
-            padding: 2rem;
-            text-align: center;
-            border-radius: 24px;
-            border: 1px solid var(--line);
-            background: var(--surface-strong);
-            box-shadow: var(--shadow);
-        }
-
-        .pagination-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            margin-top: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .page-list {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .page-dot {
-            width: 42px;
-            height: 42px;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: transparent;
-            color: var(--text);
-            font-weight: 700;
-        }
-
-        .page-dot.active {
-            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-            color: white;
-            border-color: transparent;
-        }
-
-        .drawer {
-            position: fixed;
-            inset: 0 auto 0 0;
-            width: min(88vw, 360px);
-            padding: 1.1rem;
-            border-radius: 0 24px 24px 0;
-            transform: translateX(-105%);
-            transition: transform 0.3s ease;
-            z-index: 50;
-        }
-
-        .drawer.open {
-            transform: translateX(0);
-        }
-
-        .backdrop {
-            position: fixed;
-            background: rgba(15, 18, 22, 0.35);
-            backdrop-filter: blur(6px);
-            z-index: 40;
-        }
-
-        .modal-wrap {
-            position: fixed;
-            inset: 0;
-            z-index: 60;
-            display: grid;
-            place-items: center;
-            padding: 1rem;
-        }
-
-        .modal-card {
-            width: min(640px, 100%);
-            padding: 1.25rem;
-        }
-
-        .modal-card.large {
-            width: min(860px, 100%);
-        }
-
-        .toast-stack {
-            position: fixed;
-            right: 1rem;
-            bottom: 1rem;
-            z-index: 70;
-            display: grid;
-            gap: 0.75rem;
-        }
-
-        .toast {
-            min-width: 260px;
-            max-width: 380px;
-            padding: 0.95rem 1rem;
-            border-radius: 18px;
-            color: white;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-        }
-
-        .toast-success {
-            background: linear-gradient(135deg, #2f6c57, #4b8f74);
-        }
-
-        .toast-error {
-            background: linear-gradient(135deg, #8b4c36, #b56b4e);
-        }
-
-        .toast-info {
-            background: linear-gradient(135deg, #3d6a80, #5a8fa8);
-        }
-
-        .shortcut-fab {
-            position: fixed;
-            right: 1rem;
-            top: 6.25rem;
-            z-index: 35;
-        }
-
-        .overlay-loader {
-            position: fixed;
-            inset: 0;
-            z-index: 80;
-            display: grid;
-            place-items: center;
-            background: rgba(13, 17, 22, 0.32);
-            backdrop-filter: blur(6px);
-        }
-
-        .loader-card {
-            padding: 1.5rem 1.8rem;
-            border-radius: 28px;
-            background: var(--surface-strong);
-            text-align: center;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--line);
-        }
-
-        .pulse-orb {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 1rem;
-            border-radius: 999px;
-            display: grid;
-            place-items: center;
-            color: white;
-            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-            animation: pulse 1.6s infinite ease-in-out;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(201, 154, 63, 0.28); }
-            50% { transform: scale(1.08); box-shadow: 0 0 0 18px rgba(201, 154, 63, 0); }
-        }
-
-        @media (max-width: 1180px) {
-            .hero-grid,
-            .chart-grid,
-            .scan-grid,
-            .product-grid,
-            .preview-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .toolbar-grid,
-            .metric-grid,
-            .insight-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 820px) {
-            .shell-width {
-                padding: 1rem;
-            }
-
-            .hero-grid,
-            .chart-grid,
-            .scan-grid,
-            .product-grid,
-            .preview-grid,
-            .metric-grid,
-            .insight-grid,
-            .toolbar-grid {
-                grid-template-columns: minmax(0, 1fr);
-            }
-
-            .topbar-inner {
-                padding: 0.9rem 1rem;
-            }
-
-            .hero,
-            .hero-panel,
-            .metric-card,
-            .chart-shell,
-            .scan-card,
-            .product-body,
-            .toolbar-card,
-            .modal-card,
-            .drawer {
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-
-            .toast-stack {
-                left: 1rem;
-                right: 1rem;
-            }
-
-            .toast {
-                min-width: 0;
-                max-width: 100%;
-            }
-
-            .shortcut-fab {
-                top: auto;
-                bottom: 5.5rem;
-            }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app" class="app-shell" v-cloak>
@@ -753,19 +20,19 @@
         <div class="ornament three"></div>
 
         <div class="shell-width topbar">
-            <div class="surface topbar-inner">
+            <div class="surface-glass topbar-inner">
                 <div class="flex items-center gap-4 min-w-0">
                     <button class="icon-btn lg:hidden" @click="mobileMenuOpen = true">
-                        <i class="fas fa-bars"></i>
+                        <icon name="bars"></icon>
                     </button>
                     <div class="brand-mark">
-                        <i class="fas fa-coins"></i>
+                        <icon name="coins"></icon>
                     </div>
                     <div class="min-w-0">
                         <div class="kicker">Market Watch</div>
                         <div class="flex items-center gap-3 flex-wrap">
                             <h1 class="display-font text-3xl md:text-4xl font-bold leading-none">Gold Deal Finder</h1>
-                            <span class="pill"><i class="fas fa-wave-square"></i>{{ scanLabel }}</span>
+                            <span class="pill"><icon name="wave"></icon>{{ scanLabel }}</span>
                         </div>
                     </div>
                 </div>
@@ -776,20 +43,20 @@
                         Spot {{ liveSpotPrice ? formatCurrency(liveSpotPrice) + '/g' : 'Loading' }}
                     </div>
                     <button class="btn-secondary" @click="showFavoritesModal = true">
-                        <i class="fas fa-star"></i> Shortlist {{ favorites.length ? '(' + favorites.length + ')' : '' }}
+                        <icon name="star"></icon> Shortlist {{ favorites.length ? '(' + favorites.length + ')' : '' }}
                     </button>
                     <button class="btn-secondary" @click="showExportModal = true">
-                        <i class="fas fa-download"></i> Export
+                        <icon name="download"></icon> Export
                     </button>
                     <button class="btn-secondary" @click="refreshData" :disabled="refreshing">
-                        <i class="fas" :class="refreshing ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i>
+                        <icon :name="refreshing ? 'spinner' : 'sync'"></icon>
                         {{ refreshing ? 'Refreshing' : 'Refresh' }}
                     </button>
                     <button class="btn-secondary" @click="toggleTheme">
-                        <i class="fas" :class="darkMode ? 'fa-sun' : 'fa-moon'"></i>
+                        <icon :name="darkMode ? 'sun' : 'moon'"></icon>
                     </button>
                     <button class="btn-primary" @click="showScanModal = true" :disabled="scanning">
-                        <i class="fas" :class="scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+                        <icon :name="scanning ? 'spinner' : 'search'"></icon>
                         {{ scanning ? 'Scanning' : 'Run Scan' }}
                     </button>
                 </div>
@@ -803,39 +70,39 @@
                     <div class="kicker">Navigation</div>
                     <div class="display-font text-2xl font-bold">Command Deck</div>
                 </div>
-                <button class="icon-btn" @click="mobileMenuOpen = false"><i class="fas fa-times"></i></button>
+                <button class="icon-btn" @click="mobileMenuOpen = false"><icon name="times"></icon></button>
             </div>
 
             <div class="grid gap-3">
                 <button class="btn-secondary w-full" @click="activeTab = 'products'; mobileMenuOpen = false">
-                    <i class="fas fa-gem"></i> Products
+                    <icon name="gem"></icon> Products
                 </button>
                 <button class="btn-secondary w-full" @click="activeTab = 'scans'; mobileMenuOpen = false">
-                    <i class="fas fa-history"></i> Archive
+                    <icon name="history"></icon> Archive
                 </button>
                 <button class="btn-secondary w-full" @click="activeTab = 'insights'; mobileMenuOpen = false">
-                    <i class="fas fa-chart-pie"></i> Insights
+                    <icon name="pie"></icon> Insights
                 </button>
                 <button class="btn-secondary w-full" @click="showFavoritesModal = true; mobileMenuOpen = false">
-                    <i class="fas fa-star"></i> Shortlist
+                    <icon name="star"></icon> Shortlist
                 </button>
                 <button class="btn-secondary w-full" @click="showExportModal = true; mobileMenuOpen = false">
-                    <i class="fas fa-download"></i> Export
+                    <icon name="download"></icon> Export
                 </button>
                 <button class="btn-secondary w-full" @click="refreshData(); mobileMenuOpen = false">
-                    <i class="fas fa-sync-alt"></i> Refresh
+                    <icon name="sync"></icon> Refresh
                 </button>
                 <button class="btn-secondary w-full" @click="toggleTheme(); mobileMenuOpen = false">
-                    <i class="fas" :class="darkMode ? 'fa-sun' : 'fa-moon'"></i> Theme
+                    <icon :name="darkMode ? 'sun' : 'moon'"></icon> Theme
                 </button>
                 <button class="btn-primary w-full" @click="showScanModal = true; mobileMenuOpen = false">
-                    <i class="fas fa-search"></i> Run Scan
+                    <icon name="search"></icon> Run Scan
                 </button>
             </div>
         </aside>
 
         <main class="shell-width">
-            <section class="surface hero">
+            <section class="hero">
                 <div class="hero-grid">
                     <div class="hero-panel">
                         <div class="kicker mb-3">Selected Scan</div>
@@ -851,13 +118,13 @@
                             </div>
                             <div class="flex flex-wrap gap-3">
                                 <button class="btn-secondary" @click="copyToClipboard(selectedScanId, 'Scan ID copied.')" :disabled="!selectedScanId">
-                                    <i class="fas fa-fingerprint"></i> Copy ID
+                                    <icon name="fingerprint"></icon> Copy ID
                                 </button>
                                 <button class="btn-secondary" @click="activeTab = 'scans'">
-                                    <i class="fas fa-history"></i> Browse Archive
+                                    <icon name="history"></icon> Browse Archive
                                 </button>
                                 <button class="btn-primary" @click="returnToLatest" :disabled="selectedScanIsLatest || !latestScanId">
-                                    <i class="fas fa-bolt"></i> Return To Latest
+                                    <icon name="bolt"></icon> Return To Latest
                                 </button>
                             </div>
                         </div>
@@ -874,14 +141,14 @@
                                         <div class="kicker mb-1">Scan Scope</div>
                                         <div class="font-bold">{{ selectedScanIsLatest ? 'Live baseline' : 'Historical drill-down' }}</div>
                                     </div>
-                                    <i class="fas fa-layer-group text-xl" style="color: var(--accent);"></i>
+                                    <icon name="layer" style="color: var(--accent);"></icon>
                                 </div>
                                 <div class="mini-card flex items-center justify-between">
                                     <div>
                                         <div class="kicker mb-1">Spot Benchmark</div>
                                         <div class="font-bold">{{ liveSpotPrice ? formatCurrency(liveSpotPrice) + '/g' : 'Pending feed' }}</div>
                                     </div>
-                                    <i class="fas fa-chart-line text-xl" style="color: var(--accent);"></i>
+                                    <icon name="chart" style="color: var(--accent);"></icon>
                                 </div>
                             </div>
                         </div>
@@ -919,7 +186,7 @@
                         <div class="text-sm" style="color: var(--muted);">The product grid, filters, and exports are scoped to this historical run.</div>
                     </div>
                     <button class="btn-primary" @click="returnToLatest">
-                        <i class="fas fa-arrow-up-right-from-square"></i> Jump To Latest
+                        <icon name="arrowUpRight"></icon> Jump To Latest
                     </button>
                 </div>
             </section>
@@ -953,20 +220,20 @@
                     <div class="display-font text-3xl font-bold mb-2">Dashboard Problem</div>
                     <p style="color: var(--muted);">{{ bootError }}</p>
                     <div class="mt-5 flex justify-center gap-3 flex-wrap">
-                        <button class="btn-primary" @click="refreshData"><i class="fas fa-sync-alt"></i> Retry</button>
-                        <button class="btn-secondary" @click="activeTab = 'scans'"><i class="fas fa-history"></i> Open Archive</button>
+                        <button class="btn-primary" @click="refreshData"><icon name="sync"></icon> Retry</button>
+                        <button class="btn-secondary" @click="activeTab = 'scans'"><icon name="history"></icon> Open Archive</button>
                     </div>
                 </div>
 
                 <div class="tab-row">
                     <button class="tab-btn" :class="{ active: activeTab === 'products' }" @click="activeTab = 'products'">
-                        <i class="fas fa-gem mr-2"></i>Product Deck
+                        <icon name="gem"></icon>Product Deck
                     </button>
                     <button class="tab-btn" :class="{ active: activeTab === 'scans' }" @click="activeTab = 'scans'">
-                        <i class="fas fa-history mr-2"></i>Scan Archive
+                        <icon name="history"></icon>Scan Archive
                     </button>
                     <button class="tab-btn" :class="{ active: activeTab === 'insights' }" @click="activeTab = 'insights'">
-                        <i class="fas fa-chart-pie mr-2"></i>Insights
+                        <icon name="pie"></icon>Insights
                     </button>
                 </div>
 
@@ -979,20 +246,20 @@
                             </div>
                             <div class="flex items-center gap-3 flex-wrap">
                                 <button class="btn-secondary lg:hidden" @click="showMobileFilters = !showMobileFilters">
-                                    <i class="fas fa-sliders-h"></i> Filters {{ activeFilterCount ? '(' + activeFilterCount + ')' : '' }}
+                                    <icon name="sliders"></icon> Filters {{ activeFilterCount ? '(' + activeFilterCount + ')' : '' }}
                                 </button>
                                 <button class="btn-secondary" @click="filters.onlyFavorites = !filters.onlyFavorites">
-                                    <i class="fas fa-star"></i> {{ filters.onlyFavorites ? 'Showing shortlist' : 'Shortlist only' }}
+                                    <icon name="star"></icon> {{ filters.onlyFavorites ? 'Showing shortlist' : 'Shortlist only' }}
                                 </button>
                                 <button class="btn-ghost" @click="resetFilters">Reset</button>
                             </div>
                         </div>
 
                         <div class="chip-row" v-if="activeFilterCount">
-                            <span class="chip" v-if="filters.source"><i class="fas fa-store"></i>{{ filters.source }}</span>
-                            <span class="chip" v-if="filters.purity"><i class="fas fa-gem"></i>{{ filters.purity }}</span>
+                            <span class="chip" v-if="filters.source"><icon name="store"></icon>{{ filters.source }}</span>
+                            <span class="chip" v-if="filters.purity"><icon name="gem"></icon>{{ filters.purity }}</span>
                             <span class="chip" v-if="filters.search"><i class="fas fa-magnifying-glass"></i>{{ filters.search }}</span>
-                            <span class="chip" v-if="filters.onlyFavorites"><i class="fas fa-star"></i>Shortlist</span>
+                            <span class="chip" v-if="filters.onlyFavorites"><icon name="star"></icon>Shortlist</span>
                             <span class="chip" v-if="filters.min_discount !== -100"><i class="fas fa-percent"></i>Min {{ filters.min_discount }}%</span>
                             <span class="chip" v-if="filters.max_discount !== 100"><i class="fas fa-percent"></i>Max {{ filters.max_discount }}%</span>
                         </div>
@@ -1070,17 +337,31 @@
                         <p style="color: var(--muted);">Adjust the current filters or return to the latest scan.</p>
                         <div class="mt-5 flex justify-center gap-3 flex-wrap">
                             <button class="btn-primary" @click="resetFilters"><i class="fas fa-rotate-left"></i> Reset Filters</button>
-                            <button class="btn-secondary" @click="returnToLatest" :disabled="selectedScanIsLatest"><i class="fas fa-bolt"></i> Return To Latest</button>
+                            <button class="btn-secondary" @click="returnToLatest" :disabled="selectedScanIsLatest"><icon name="bolt"></icon> Return To Latest</button>
                         </div>
                     </div>
 
                     <div v-else>
-                        <div class="product-grid">
+                        <div v-if="scanning || refreshing" class="product-grid">
+                            <article class="product-card skeleton" v-for="i in 12" :key="'skel-'+i">
+                                <div class="product-media skeleton"></div>
+                                <div class="product-body">
+                                    <div class="h-2 bg-secondary rounded w-1/4 mb-2 skeleton"></div>
+                                    <div class="h-4 bg-secondary rounded w-3/4 mb-4 skeleton"></div>
+                                    <div class="grid grid-cols-2 gap-3 mb-4">
+                                        <div class="h-8 bg-secondary rounded skeleton"></div>
+                                        <div class="h-8 bg-secondary rounded skeleton"></div>
+                                    </div>
+                                    <div class="h-10 bg-secondary rounded w-full skeleton"></div>
+                                </div>
+                            </article>
+                        </div>
+                        <div v-else class="product-grid">
                             <article class="product-card" v-for="product in paginatedProducts" :key="product.url">
                                 <div class="product-media">
                                     <img :src="product.image_url || 'https://placehold.co/640x640/f1e7cf/4f3a14?text=Gold+Deal'" :alt="product.title" @error="handleImageError">
                                     <div class="absolute top-3 left-3 flex gap-2 flex-wrap">
-                                        <span class="pill"><i class="fas fa-store"></i>{{ product.source }}</span>
+                                        <span class="pill"><icon name="store"></icon>{{ product.source }}</span>
                                         <span class="pill neutral">{{ product.purity }}</span>
                                     </div>
                                     <button class="icon-btn absolute top-3 right-3" @click="toggleFavorite(product)">
@@ -1116,9 +397,9 @@
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-2">
-                                        <button class="btn-secondary" @click="viewProductDetails(product)"><i class="fas fa-eye"></i></button>
-                                        <button class="btn-secondary" @click="shareProduct(product)"><i class="fas fa-share-nodes"></i></button>
-                                        <a class="btn-primary text-center" :href="product.url" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i></a>
+                                        <button class="btn-secondary" @click="viewProductDetails(product)"><icon name="eye"></icon></button>
+                                        <button class="btn-secondary" @click="shareProduct(product)"><icon name="share"></icon></button>
+                                        <a class="btn-primary text-center" :href="product.url" target="_blank" rel="noopener noreferrer"><icon name="arrowUpRight"></icon></a>
                                     </div>
                                 </div>
                             </article>
@@ -1127,9 +408,9 @@
                         <div class="pagination-row">
                             <div style="color: var(--muted);">Showing {{ paginatedProducts.length }} of {{ sortedProducts.length }} filtered products</div>
                             <div class="page-list">
-                                <button class="page-dot" @click="prevPage" :disabled="currentPage === 1"><i class="fas fa-chevron-left"></i></button>
+                                <button class="page-dot" @click="prevPage" :disabled="currentPage === 1"><icon name="chevronLeft"></icon></button>
                                 <button class="page-dot" v-for="page in pageNumbers" :key="page" :class="{ active: currentPage === page }" @click="goToPage(page)">{{ page }}</button>
-                                <button class="page-dot" @click="nextPage" :disabled="currentPage === totalPages"><i class="fas fa-chevron-right"></i></button>
+                                <button class="page-dot" @click="nextPage" :disabled="currentPage === totalPages"><icon name="chevronRight"></icon></button>
                             </div>
                         </div>
                     </div>
@@ -1143,7 +424,7 @@
                                 <h3 class="display-font text-3xl font-bold">Recent Scan Timeline</h3>
                             </div>
                             <button class="btn-primary" @click="returnToLatest" :disabled="selectedScanIsLatest || !latestScanId">
-                                <i class="fas fa-bolt"></i> Restore Latest Context
+                                <icon name="bolt"></icon> Restore Latest Context
                             </button>
                         </div>
                         <div class="scan-grid" v-if="scans.length">
@@ -1177,7 +458,7 @@
                                 </div>
                                 <div class="flex gap-3 flex-wrap">
                                     <button class="btn-primary flex-1" @click="loadScanDetails(scan.scan_id)">
-                                        <i class="fas fa-eye"></i> Open Scan
+                                        <icon name="eye"></icon> Open Scan
                                     </button>
                                     <button class="btn-secondary" @click="copyToClipboard(scan.scan_id, 'Scan ID copied.')">
                                         <i class="fas fa-copy"></i>
@@ -1192,7 +473,7 @@
                     </div>
                 </section>
 
-                <section v-show="activeTab === 'insights'">
+                <section v-if="activeTab === 'insights'">
                     <div class="insight-grid">
                         <article class="metric-card">
                             <div class="metric-label">Historical Scans</div>
@@ -1294,13 +575,13 @@
                         <div class="kicker">Manual Scan</div>
                         <h3 class="display-font text-3xl font-bold">Run A Fresh Capture</h3>
                     </div>
-                    <button class="icon-btn" @click="showScanModal = false"><i class="fas fa-times"></i></button>
+                    <button class="icon-btn" @click="showScanModal = false"><icon name="times"></icon></button>
                 </div>
                 <p class="mb-6" style="color: var(--muted);">This will trigger a new live scrape and write a new scan file into the local archive. Cooldown is configurable in environment settings and defaults to off locally.</p>
                 <div class="flex gap-3 justify-end flex-wrap">
                     <button class="btn-secondary" @click="showScanModal = false">Cancel</button>
                     <button class="btn-primary" @click="startNewScan" :disabled="scanning">
-                        <i class="fas" :class="scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+                        <icon :name="scanning ? 'spinner' : 'search'"></icon>
                         {{ scanning ? 'Running scan' : 'Start scan' }}
                     </button>
                 </div>
@@ -1315,7 +596,7 @@
                         <div class="kicker">Export</div>
                         <h3 class="display-font text-3xl font-bold">Export Current Scan View</h3>
                     </div>
-                    <button class="icon-btn" @click="showExportModal = false"><i class="fas fa-times"></i></button>
+                    <button class="icon-btn" @click="showExportModal = false"><icon name="times"></icon></button>
                 </div>
                 <div class="grid gap-3 mb-6">
                     <label class="mini-card flex items-center justify-between cursor-pointer">
@@ -1348,7 +629,7 @@
                         <div class="kicker">Shortlist</div>
                         <h3 class="display-font text-3xl font-bold">Saved Products In This Scan</h3>
                     </div>
-                    <button class="icon-btn" @click="showFavoritesModal = false"><i class="fas fa-times"></i></button>
+                    <button class="icon-btn" @click="showFavoritesModal = false"><icon name="times"></icon></button>
                 </div>
                 <div class="grid gap-3 max-h-96 overflow-y-auto" v-if="favoriteProducts.length">
                     <article class="scan-card" v-for="product in favoriteProducts" :key="product.url">
@@ -1358,8 +639,8 @@
                                 <div class="text-sm mt-2" style="color: var(--muted);">{{ product.source }} · {{ product.brand || 'Unknown' }} · {{ formatWeight(product.weight_grams) }} · {{ formatPercent(product.discount_percent) }}</div>
                             </div>
                             <div class="flex gap-2">
-                                <a class="btn-primary" :href="product.url" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i></a>
-                                <button class="btn-secondary" @click="toggleFavorite(product)"><i class="fas fa-trash"></i></button>
+                                <a class="btn-primary" :href="product.url" target="_blank" rel="noopener noreferrer"><icon name="arrowUpRight"></icon></a>
+                                <button class="btn-secondary" @click="toggleFavorite(product)"><icon name="trash"></icon></button>
                             </div>
                         </div>
                     </article>
@@ -1379,7 +660,7 @@
                         <div class="kicker">Product Detail</div>
                         <h3 class="display-font text-3xl font-bold">{{ selectedProduct.title }}</h3>
                     </div>
-                    <button class="icon-btn" @click="selectedProduct = null"><i class="fas fa-times"></i></button>
+                    <button class="icon-btn" @click="selectedProduct = null"><icon name="times"></icon></button>
                 </div>
                 <div class="grid md:grid-cols-2 gap-5">
                     <div class="product-media rounded-2xl overflow-hidden">
@@ -1402,21 +683,22 @@
                             <div class="grid gap-3 text-sm">
                                 <div class="flex items-center justify-between"><span style="color: var(--muted);">Selling price</span><strong>{{ formatCurrency(selectedProduct.selling_price) }}</strong></div>
                                 <div class="flex items-center justify-between"><span style="color: var(--muted);">Expected price</span><strong>{{ formatCurrency(selectedProduct.expected_price) }}</strong></div>
+                                <div class="flex items-center justify-between" v-if="selectedProduct.expected_price > selectedProduct.selling_price"><span style="color: var(--muted);">Savings</span><strong class="tone-positive">{{ formatCurrency(selectedProduct.expected_price - selectedProduct.selling_price) }}</strong></div>
                                 <div class="flex items-center justify-between"><span style="color: var(--muted);">Price / gram</span><strong>{{ formatCurrency(selectedProduct.price_per_gram) }}</strong></div>
                                 <div class="flex items-center justify-between"><span style="color: var(--muted);">Discount</span><strong :class="discountTone(selectedProduct.discount_percent)">{{ formatPercent(selectedProduct.discount_percent) }}</strong></div>
                             </div>
                         </div>
                         <div class="flex gap-3 flex-wrap">
-                            <button class="btn-secondary" @click="toggleFavorite(selectedProduct)"><i class="fas fa-star"></i> {{ isFavorite(selectedProduct) ? 'Remove' : 'Save' }}</button>
-                            <button class="btn-secondary" @click="shareProduct(selectedProduct)"><i class="fas fa-share-nodes"></i> Share</button>
-                            <a class="btn-primary" :href="selectedProduct.url" target="_blank" rel="noopener noreferrer"><i class="fas fa-arrow-up-right-from-square"></i> Open listing</a>
+                            <button class="btn-secondary" @click="toggleFavorite(selectedProduct)"><icon name="star"></icon> {{ isFavorite(selectedProduct) ? 'Remove' : 'Save' }}</button>
+                            <button class="btn-secondary" @click="shareProduct(selectedProduct)"><icon name="share"></icon> Share</button>
+                            <a class="btn-primary" :href="selectedProduct.url" target="_blank" rel="noopener noreferrer"><icon name="arrowUpRight"></icon> Open listing</a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="toast-stack">
+        <div class="toast-stack" aria-live="polite">
             <div v-for="notification in notifications" :key="notification.id" :class="notificationClass(notification.type)">
                 {{ notification.message }}
             </div>
@@ -1434,6 +716,7 @@
     <script>
         Vue.config.productionTip = false;
     </script>
+    <script src="/static/icons.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
