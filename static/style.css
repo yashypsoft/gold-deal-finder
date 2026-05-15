@@ -750,3 +750,70 @@ body {
     outline-offset: 2px;
 }
 
+
+.chart-shell,
+.scan-card,
+.product-card,
+.toolbar-card,
+.modal-card,
+.drawer {
+    border: 1px solid var(--line);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+}
+.chart-shell,
+.scan-card,
+.product-card,
+.modal-card,
+.drawer {
+    background: var(--surface-strong);
+    border-radius: 24px;
+}
+.chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+}
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.chart-shell {
+    padding: 1rem;
+}
+.chart-canvas {
+    position: relative;
+    height: 320px;
+}
+.mini-card {
+    padding: 0.9rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.38);
+    border: 1px solid var(--line);
+}
+:root.dark .mini-card {
+    background: rgba(255, 255, 255, 0.03);
+}
+.empty-state,
+.alert-card {
+    padding: 2rem;
+    text-align: center;
+    border-radius: 24px;
+    border: 1px solid var(--line);
+    background: var(--surface-strong);
+    box-shadow: var(--shadow);
+}
+.shortcut-fab {
+    position: fixed;
+    right: 1rem;
+    top: 6.25rem;
+    z-index: 35;
+}
+@media (max-width: 1024px) {
+    .shortcut-fab {
+        top: auto;
+        bottom: 5.5rem;
+    }
+}
