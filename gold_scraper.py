@@ -4,11 +4,47 @@ import requests
 import time
 import re
 import random
+import logging
+from functools import wraps
 from typing import Dict, List, Optional, Tuple, Any
 from config import AJIO_API_URL, SEARCH_PARAMS, REQUEST_DELAY
 from price_calculator import GoldPriceCalculator
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger(__name__)
+
+USER_AGENTS = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0',
+]
+
+
+def get_random_ua() -> str:
+    return random.choice(USER_AGENTS)
+
+
+def retry_on_failure(max_retries=3, base_delay=2, backoff=2):
+    """Retry decorator with exponential backoff and jitter."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exc = e
+                    delay = base_delay * (backoff ** attempt) + random.uniform(0, 1)
+                    logger.warning(f"Retry {attempt+1}/{max_retries} for {func.__name__} after {delay:.1f}s: {e}")
+                    time.sleep(delay)
+            logger.error(f"All {max_retries} retries failed for {func.__name__}: {last_exc}")
+            return []
+        return wrapper
+    return decorator
 
 _EXCLUDE_PATTERNS = [
     r'gold[- ]plated',
@@ -33,18 +69,19 @@ def is_real_gold_product(title: str) -> bool:
 class GoldScraper:
     def __init__(self):
         self.price_calculator = GoldPriceCalculator()
+        self._gold_data = None  # Cached per-scan gold price data
         self.ajio_headers = {
             'authority': 'www.ajio.com',
             'accept': 'application/json, text/plain, */*',
             'accept-language': 'en-US,en;q=0.9',
             'referer': 'https://www.ajio.com/',
-            'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+            'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="136", "Google Chrome";v="136"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"macOS"',
             'sec-fetch-dest': 'empty',
             'sec-fetch-mode': 'cors',
             'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+            'user-agent': get_random_ua(),
         }
     
     def create_myntra_session(self):
@@ -52,9 +89,7 @@ class GoldScraper:
         s = requests.Session()
         
         base_headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": get_random_ua(),
             "Accept-Language": "en-GB,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Connection": "keep-alive",
@@ -304,36 +339,34 @@ class GoldScraper:
         print("🔄 Scraping AJIO...")
         products = []
 
+        @retry_on_failure(max_retries=3, base_delay=2)
         def fetch_page(page: int):
             params = SEARCH_PARAMS['ajio'].copy()
             params['currentPage'] = page
 
-            try:
-                r = requests.get(
-                    AJIO_API_URL,
-                    params=params,
-                    headers=self.ajio_headers,
-                    timeout=10
-                )
+            r = requests.get(
+                AJIO_API_URL,
+                params=params,
+                headers=self.ajio_headers,
+                timeout=15
+            )
 
-                if r.status_code != 200:
-                    print(f"Page {page} failed")
-                    return []
-
-                data = r.json()
-                page_products = []
-
-                for p in data.get("products", []):
-                    parsed = self._parse_ajio_product(p)
-                    if parsed:
-                        page_products.append(parsed)
-
-                print(f"Page {page}: {len(page_products)} valid")
-                return page_products
-
-            except Exception as e:
-                print(f"Page {page} error: {e}")
+            if r.status_code == 429:
+                raise Exception(f"Rate limited on page {page}")
+            if r.status_code != 200:
+                print(f"Page {page} failed with status {r.status_code}")
                 return []
+
+            data = r.json()
+            page_products = []
+
+            for p in data.get("products", []):
+                parsed = self._parse_ajio_product(p)
+                if parsed:
+                    page_products.append(parsed)
+
+            print(f"Page {page}: {len(page_products)} valid")
+            return page_products
 
         with ThreadPoolExecutor(max_workers=6) as ex:
             futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
@@ -391,7 +424,7 @@ class GoldScraper:
             
             # Calculate expected price
             expected_price_info = self.price_calculator.calculate_expected_price(
-                weight, purity, is_jewellery
+                weight, purity, is_jewellery, gold_data=self._gold_data
             )
             # print(weight, purity, is_jewellery)
             # print(expected_price_info);
@@ -453,57 +486,54 @@ class GoldScraper:
         print("🔄 Scraping Myntra...")
         products = []
 
-        def fetch_page(page: int):
-            session, base_headers = self.create_myntra_session()
+        # Single session warmup — reused across all pages
+        session, base_headers = self.create_myntra_session()
 
+        api_headers = {
+            "User-Agent": base_headers["User-Agent"],
+            "referer": "https://www.myntra.com/gold-coin",
+            "x-meta-app": "channel=web",
+            "x-myntraweb": "Yes",
+            "x-requested-with": "browser",
+        }
+
+        for page in range(1, 13):
             params = {
                 "rows": 50,
                 "o": (49 * (page - 1)) + 1,
-                "pincode": "384315"
-            }
-
-            api_headers = {
-                "User-Agent": base_headers["User-Agent"],
-                # "Accept": "application/json",
-                "referer": "https://www.myntra.com/gold-coin",
-                "x-meta-app": "channel=web",
-                "x-myntraweb": "Yes",
-                "x-requested-with": "browser"
+                "pincode": "384315",
             }
 
             try:
+                time.sleep(random.uniform(0.3, 0.8))  # Jitter between pages
                 r = session.get(
                     "https://www.myntra.com/gateway/v4/search/gold-coin",
                     params=params,
                     headers=api_headers,
-                    timeout=20
+                    timeout=20,
                 )
 
+                if r.status_code == 429:
+                    logger.warning(f"Myntra rate limited on page {page} — backing off")
+                    time.sleep(random.uniform(10, 20))
+                    continue
+                if r.status_code == 403:
+                    logger.warning(f"Myntra blocked on page {page} — stopping")
+                    break
                 if r.status_code != 200:
-                    return []
-                # print(f"Page {page} response:")
-                # print(r.status_code)
-                # print(r.text)  # Print first 200 characters of response text
-                data = r.json()
-                page_products = []
+                    continue
 
+                data = r.json()
                 for p in data.get("products", []):
                     parsed = self._parse_myntra_product(p)
                     if parsed:
-                        page_products.append(parsed)
+                        products.append(parsed)
 
-                print(f"Page {page}: {len(page_products)} valid")
-                return page_products
+                print(f"Page {page}: {sum(1 for p in data.get('products', []))} raw, running total {len(products)}")
 
             except Exception as e:
-                print(f"Page {page} error: {e}")
-                return []
-
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
-
-            for f in as_completed(futures):
-                products.extend(f.result())
+                logger.error(f"Myntra page {page} error: {e}")
+                continue
 
         print(f"✅ Myntra total: {len(products)}")
         return products
@@ -586,7 +616,7 @@ class GoldScraper:
             
             # Calculate expected price
             expected_price_info = self.price_calculator.calculate_expected_price(
-                weight, purity, is_jewellery
+                weight, purity, is_jewellery, gold_data=self._gold_data
             )
             expected_price = expected_price_info['total_expected']
             # print(expected_price,weight, purity, is_jewellery)
@@ -654,7 +684,14 @@ class GoldScraper:
             return None
     
     def scrape_all(self) -> List[Dict]:
-        with ThreadPoolExecutor(max_workers=5) as ex:
+        # Fetch gold price ONCE per scan cycle — avoids 400+ cache reads
+        self._gold_data = self.price_calculator.get_live_gold_price()
+        logger.info(f"Gold price fetched: {self._gold_data.get('spot_price_per_gram', 'N/A')}/g ({self._gold_data.get('source', 'unknown')})")
+
+        # Randomize UA per scan cycle
+        self.ajio_headers['user-agent'] = get_random_ua()
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
             f1 = ex.submit(self.scrape_ajio)
             f2 = ex.submit(self.scrape_myntra)
 

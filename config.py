@@ -1,5 +1,6 @@
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 
 # Setup logging
@@ -7,8 +8,12 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('gold_deal_finder.log'),
-        # logging.StreamHandler()
+        RotatingFileHandler(
+            'gold_deal_finder.log',
+            maxBytes=5 * 1024 * 1024,  # 5 MB
+            backupCount=3,
+        ),
+        logging.StreamHandler(),
     ]
 )
 

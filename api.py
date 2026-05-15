@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import gzip
 import hashlib
 import json
@@ -34,11 +35,17 @@ CACHE_DIR = BASE_DIR / "cache"
 for directory in (STATIC_DIR, DATA_DIR, TEMPLATES_DIR, CACHE_DIR):
     directory.mkdir(exist_ok=True)
 
-app = FastAPI(title="Gold Deal Finder", version="3.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_sample_data_if_empty()
+    yield
+
+
+app = FastAPI(title="Gold Deal Finder", version="3.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -122,7 +129,13 @@ def get_cached_response(cache_key: str) -> Optional[Any]:
     return data
 
 
+MAX_CACHE_SIZE = 100
+
+
 def set_cached_response(cache_key: str, data: Any) -> None:
+    if len(response_cache) >= MAX_CACHE_SIZE:
+        oldest_key = min(response_cache, key=lambda k: response_cache[k][1])
+        del response_cache[oldest_key]
     response_cache[cache_key] = (data, now_ts())
 
 
@@ -350,9 +363,6 @@ def ensure_sample_data_if_empty() -> None:
     create_sample_scans(5)
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    ensure_sample_data_if_empty()
 
 
 @app.get("/")
@@ -538,22 +548,23 @@ async def get_scan_timeline(days: int = Query(30, ge=1, le=365)):
 async def _trigger_scan(background_tasks: BackgroundTasks) -> Dict[str, Any]:
     global last_scan_time
 
-    # async with scan_lock:
-    #     now = datetime.utcnow()
-    #     if SCAN_COOLDOWN and last_scan_time and (now - last_scan_time) < SCAN_COOLDOWN:
-    #         remaining = int((SCAN_COOLDOWN - (now - last_scan_time)).total_seconds())
-    #         raise HTTPException(
-    #             status_code=429,
-    #             detail=error_detail(
-    #                 "scan_cooldown",
-    #                 f"Scan recently triggered. Try again in {max(1, remaining // 60)} minute(s).",
-    #                 retry_after_seconds=remaining,
-    #             ),
-    #         )
-    #     last_scan_time = now
+    now = datetime.now()
+
+    async with scan_lock:
+        if SCAN_COOLDOWN and last_scan_time and (now - last_scan_time) < SCAN_COOLDOWN:
+            remaining = int((SCAN_COOLDOWN - (now - last_scan_time)).total_seconds())
+            raise HTTPException(
+                status_code=429,
+                detail=error_detail(
+                    "scan_cooldown",
+                    f"Scan recently triggered. Try again in {max(1, remaining // 60)} minute(s).",
+                    retry_after_seconds=remaining,
+                ),
+            )
+        last_scan_time = now
 
     try:
-        products = await scraper.scrape_all()
+        products = await asyncio.to_thread(scraper.scrape_all)
     except Exception as exc:
         async with scan_lock:
             last_scan_time = None

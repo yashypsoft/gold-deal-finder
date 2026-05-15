@@ -9,7 +9,7 @@ from typing import Dict, Optional, Tuple
 from config import GST_RATE, PURITY_MAPPING
 import logging
 import threading
-from functools import lru_cache
+
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +352,7 @@ class GoldPriceCalculator:
         }
     
     def calculate_expected_price(self, weight: float, purity: str, 
-                                product_type: str = 'jewellery') -> Dict:
+                                product_type: str = 'jewellery', gold_data: Dict = None) -> Dict:
         """
         Calculate expected price for gold item
         
@@ -360,9 +360,11 @@ class GoldPriceCalculator:
             weight: Weight in grams
             purity: '24K', '22K', '18K', '14K'
             product_type: 'jewellery' or 'coin'
+            gold_data: Pre-fetched gold price data (avoids redundant cache reads)
         """
         # Get current gold prices
-        gold_data = self.get_live_gold_price()
+        if gold_data is None:
+            gold_data = self.get_live_gold_price()
         
         # Get purity factor
         purity_factor = PURITY_MAPPING.get(purity, 0.9167)
@@ -435,9 +437,8 @@ class GoldPriceCalculator:
         discount = ((expected_price - selling_price) / expected_price) * 100
         return round(max(discount, -100), 2)  # Ensure non-negative
     
-    @lru_cache(maxsize=1)
     def get_cached_price_summary(self) -> str:
-        """Cached version of price summary - refreshes every 5 minutes"""
+        """Get price summary (delegates to get_price_summary which uses cached gold data)"""
         return self.get_price_summary()
     
     def get_price_summary(self) -> str:

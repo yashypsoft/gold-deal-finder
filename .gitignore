@@ -2,6 +2,9 @@
 *.log
 .env
 test.py
+test2.py
+push.sh
+cookies.txt
 venv
 __pycache__/
 
