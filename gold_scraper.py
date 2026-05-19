@@ -219,20 +219,77 @@ class GoldScraper:
         def is_valid_weight(n: float) -> bool:
             return n not in PURITY_NUMBERS and 0.001 <= n <= 10_000
     
-        # CASE 1: "4.5 Gm (0.5 Gm + 2 Gm + 2 Gm)"
-        paren_match = re.search(r'(\d+\.?\d*)\s*gm?\s*\(([^)]+)\)', title_lower)
-        if paren_match:
-            outside = float(paren_match.group(1))
-            inside_weights = [float(w) for w in re.findall(r'(\d+\.?\d*)\s*gm?', paren_match.group(2))]
-            if inside_weights and abs(outside - sum(inside_weights)) < 0.01:
-                return purity, outside
+        # Parentheses resolving (e.g., "(2gm x 3)", "(2gm + 1gm)")
+        for paren_content in re.findall(r'\(([^)]+)\)', title_lower):
+            # Check if it has a multiplication pattern like "2gm x 3" or "2g * 3"
+            mult_match = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g)?\s*(?:x|\*)\s*(\d+)', paren_content)
+            if mult_match:
+                each_w = float(mult_match.group(1))
+                count = int(mult_match.group(2))
+                calculated_total = each_w * count
+                
+                # Check for a matching outside weight
+                title_without_paren = re.sub(r'\([^)]+\)', ' ', title_lower)
+                outside_weights = []
+                for w_match in re.finditer(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', title_without_paren):
+                    w = float(w_match.group(1))
+                    if is_valid_weight(w):
+                        outside_weights.append(w)
+                
+                for ow in outside_weights:
+                    if abs(ow - calculated_total) < 0.01:
+                        return purity, ow
+                
+                if is_valid_weight(calculated_total):
+                    return purity, calculated_total
     
-        # CASE 2: Plus sums  "0.5 Gm + 2 Gm + 2 Gm"
+            # Check if it has an addition pattern like "2gm + 1gm"
+            if '+' in paren_content:
+                inside_weights = [float(w) for w in re.findall(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', paren_content)]
+                if inside_weights:
+                    calculated_total = sum(inside_weights)
+                    title_without_paren = re.sub(r'\([^)]+\)', ' ', title_lower)
+                    outside_weights = []
+                    for w_match in re.finditer(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', title_without_paren):
+                        w = float(w_match.group(1))
+                        if is_valid_weight(w):
+                            outside_weights.append(w)
+                    
+                    for ow in outside_weights:
+                        if abs(ow - calculated_total) < 0.01:
+                            return purity, ow
+                    
+                    if is_valid_weight(calculated_total):
+                        return purity, calculated_total
+    
+        # Check for multiplication pattern outside parentheses (e.g. "2gm x 3")
+        mult_match = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g)?\s*(?:x|\*)\s*(\d+)', title_lower)
+        if mult_match:
+            each_w = float(mult_match.group(1))
+            count = int(mult_match.group(2))
+            calculated_total = each_w * count
+            
+            span = mult_match.span()
+            title_stripped = title_lower[:span[0]] + " " + title_lower[span[1]:]
+            other_weights = []
+            for w_match in re.finditer(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', title_stripped):
+                w = float(w_match.group(1))
+                if is_valid_weight(w):
+                    other_weights.append(w)
+            
+            for ow in other_weights:
+                if abs(ow - calculated_total) < 0.01:
+                    return purity, ow
+            
+            if is_valid_weight(calculated_total):
+                return purity, calculated_total
+    
+        # CASE 2: Plus sums outside parentheses (e.g., "1gm + 1gm")
         if '+' in title_lower:
             parts = re.split(r'\s*\+\s*', title_lower)
             plus_weights = []
             for part in parts:
-                m = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', part)
+                m = re.search(r'(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', part)
                 if m:
                     w = float(m.group(1))
                     if is_valid_weight(w):
@@ -240,14 +297,14 @@ class GoldScraper:
             if plus_weights:
                 return purity, sum(plus_weights)
     
-        # CASE 3: Hyphen before weight  "Coin-1gm"  "Coin- 0.500 gm"
-        hyphen_match = re.search(r'-\s*(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr)\b', title_lower)
+        # CASE 3: Hyphen before weight "Coin-1gm" "Coin- 0.500 gm"
+        hyphen_match = re.search(r'-\s*(\d+\.?\d*)\s*(?:grams?|gms?|gm|gr|g(?!\w))\b', title_lower)
         if hyphen_match:
             w = float(hyphen_match.group(1))
             if is_valid_weight(w):
                 return purity, w
     
-        # CASE 4: Milligrams  "100 Mg"
+        # CASE 4: Milligrams "100 Mg"
         mg_match = re.search(r'(\d+\.?\d*)\s*mg\b', title_lower)
         if mg_match:
             w_mg = float(mg_match.group(1))
@@ -274,11 +331,10 @@ class GoldScraper:
                     continue
     
         if all_weights:
-            if all(w == all_weights[0] for w in all_weights):
-                return purity, all_weights[0]
-            return purity, sum(all_weights)
+            # If we have multiple different weights, return the first one as it is the total weight
+            return purity, all_weights[0]
     
-        return purity, 'None'
+        return purity, None
     
     
     def determine_product_type(self, title: str, description: str = "") -> str:
