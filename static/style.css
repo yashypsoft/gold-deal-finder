@@ -714,7 +714,8 @@ html, body {
 }
 @media (max-width: 580px) {
   .product-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
   }
 }
 
@@ -1242,6 +1243,11 @@ html, body {
   100% { background-position: -200% 0; }
 }
 
+/* Mobile Bottom Navigation Bar */
+.mobile-bottom-nav {
+  display: none;
+}
+
 /* Responsive Mobile Handling */
 @media (max-width: 768px) {
   .app-header {
@@ -1254,7 +1260,8 @@ html, body {
     font-size: 1.05rem;
   }
   .app-main {
-    padding: 0.85rem;
+    padding: 0.75rem;
+    padding-bottom: 75px !important;
   }
   .app-sidebar {
     position: fixed;
@@ -1271,6 +1278,99 @@ html, body {
   .market-status-bar {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Mobile Bottom Navigation */
+  .mobile-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 90;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    flex: 1;
+    height: 100%;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    transition: color var(--transition-fast);
+  }
+
+  .mobile-nav-item i {
+    font-size: 1.1rem;
+  }
+
+  .mobile-nav-item.active {
+    color: var(--gold);
+  }
+
+  .mobile-nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 20%;
+    font-size: 0.6rem;
+    font-weight: 700;
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+    padding: 1px 5px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+
+  .mobile-nav-badge.highlight {
+    background: var(--gold);
+    color: #ffffff;
+    border: none;
+  }
+
+  /* Mobile Filter Row */
+  .filter-bar {
+    padding: 0.5rem 0.65rem;
+  }
+  .filter-row-inline {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .search-input-wrapper {
+    width: 100%;
+    min-width: 100%;
+  }
+  .select-control {
+    flex: 1;
+    height: 36px;
+    font-size: 0.78rem;
+  }
+
+  /* Mobile Drawer Bottom Sheet */
+  .filter-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    top: auto !important;
+    bottom: 0 !important;
+    max-height: 85vh;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.2);
+  }
 }
 
 /* Dealer Rates Banner Container & Cards */
@@ -1281,9 +1381,24 @@ html, body {
   margin-bottom: 1rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
   .dealer-rates-container {
-    grid-template-columns: 1fr;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.75rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .dealer-rates-container::-webkit-scrollbar {
+    display: none;
+  }
+  .rate-banner-card {
+    min-width: 290px;
+    max-width: 320px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
   }
 }
 

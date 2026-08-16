@@ -636,6 +636,32 @@
                 <span>{{ toast.message }}</span>
             </div>
         </div>
+
+        <!-- Mobile Sticky Bottom Bar (visible on < 768px viewports) -->
+        <div class="mobile-bottom-nav">
+            <button class="mobile-nav-item" :class="{ active: activeTab === 'products' && !filters.onlyFavorites }" @click="switchTab('products'); filters.onlyFavorites = false">
+                <i class="fa-solid fa-table-cells-large"></i>
+                <span>Products</span>
+                <span class="mobile-nav-badge" v-if="filteredProducts.length">{{ filteredProducts.length }}</span>
+            </button>
+
+            <button class="mobile-nav-item" :class="{ active: activeTab === 'insights' }" @click="switchTab('insights')">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Analytics</span>
+            </button>
+
+            <button class="mobile-nav-item" :class="{ active: filters.onlyFavorites }" @click="switchTab('products'); filters.onlyFavorites = !filters.onlyFavorites">
+                <i class="fa-solid fa-star"></i>
+                <span>Favorites</span>
+                <span class="mobile-nav-badge" v-if="favorites.length">{{ favorites.length }}</span>
+            </button>
+
+            <button class="mobile-nav-item" @click="showFilterDrawer = true">
+                <i class="fa-solid fa-sliders"></i>
+                <span>Filters</span>
+                <span class="mobile-nav-badge highlight" v-if="activeFilterCount">{{ activeFilterCount }}</span>
+            </button>
+        </div>
     </div>
 
     <!-- Application JavaScript logic -->
