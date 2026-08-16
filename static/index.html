@@ -196,7 +196,7 @@
                 <!-- Product Deck View -->
                 <div v-if="activeTab === 'products'">
                     <!-- Dealer Rates Banner Strip (Sorted Low to High Price) -->
-                    <div class="dealer-rates-container" v-if="dealerRates && sortedDealerRates.length">
+                    <div class="dealer-rates-container" v-if="dealerRates && sortedDealerRates && sortedDealerRates.length">
                         <div v-for="card in sortedDealerRates" :key="card.key" class="rate-banner-card" :class="card.card_class">
                             <div class="rate-banner-header">
                                 <div class="rate-banner-brand">
@@ -639,6 +639,6 @@
     </div>
 
     <!-- Application JavaScript logic -->
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20260816_3"></script>
 </body>
 </html>
