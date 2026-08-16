@@ -234,6 +234,135 @@
                 return distribution;
             },
 
+            sortedDealerRates() {
+                if (!this.dealerRates) return [];
+                const keys = ['bhima', 'kalyan', 'tanishq', 'mmtc', 'josalukkas', 'joyalukkas', 'malabar'];
+                const cardConfigs = {
+                    kalyan: {
+                        brand: 'Kalyan Jewellers',
+                        card_class: 'kalyan-card',
+                        title: 'Kalyan Jewellers Rates',
+                        tag: 'OFFICIAL BOARD RATE',
+                        badge_bg: 'rgba(197, 160, 89, 0.15)',
+                        badge_color: 'var(--gold-primary)',
+                        tag_bg: 'rgba(197, 160, 89, 0.12)',
+                        tag_color: 'var(--gold-primary)',
+                        tag_border: 'rgba(197, 160, 89, 0.25)',
+                        icon: 'fa-solid fa-gem',
+                        filter_source: '',
+                        site_label: 'Kalyan Site'
+                    },
+                    joyalukkas: {
+                        brand: 'Joyalukkas',
+                        card_class: 'joyalukkas-card',
+                        title: 'Joyalukkas Rates',
+                        tag: 'OFFICIAL BOARD RATE',
+                        badge_bg: 'rgba(198, 40, 40, 0.15)',
+                        badge_color: '#c62828',
+                        tag_bg: 'rgba(198, 40, 40, 0.12)',
+                        tag_color: '#c62828',
+                        tag_border: 'rgba(198, 40, 40, 0.25)',
+                        icon: 'fa-solid fa-crown',
+                        filter_source: 'Joyalukkas',
+                        site_label: 'Joyalukkas Site'
+                    },
+                    malabar: {
+                        brand: 'Malabar Gold',
+                        card_class: 'malabar-card',
+                        title: 'Malabar Gold Rates',
+                        tag: 'OFFICIAL BOARD RATE',
+                        badge_bg: 'rgba(183, 28, 28, 0.15)',
+                        badge_color: '#b71c1c',
+                        tag_bg: 'rgba(183, 28, 28, 0.12)',
+                        tag_color: '#b71c1c',
+                        tag_border: 'rgba(183, 28, 28, 0.25)',
+                        icon: 'fa-solid fa-coins',
+                        filter_source: 'Malabar Gold',
+                        site_label: 'Malabar Site'
+                    },
+                    josalukkas: {
+                        brand: 'Jos Alukkas',
+                        card_class: 'josalukkas-card',
+                        title: 'Jos Alukkas Rates',
+                        tag: 'OFFICIAL BOARD RATE',
+                        badge_bg: 'rgba(230, 81, 0, 0.15)',
+                        badge_color: '#e65100',
+                        tag_bg: 'rgba(230, 81, 0, 0.12)',
+                        tag_color: '#e65100',
+                        tag_border: 'rgba(230, 81, 0, 0.25)',
+                        icon: 'fa-solid fa-gem',
+                        filter_source: 'Jos Alukkas',
+                        site_label: 'Jos Alukkas Site'
+                    },
+                    tanishq: {
+                        brand: 'Tanishq (Titan)',
+                        card_class: 'tanishq-card',
+                        title: 'Tanishq Live Rates',
+                        tag: 'TATA GOLD RATE',
+                        badge_bg: 'rgba(216, 27, 96, 0.15)',
+                        badge_color: '#d81b60',
+                        tag_bg: 'rgba(216, 27, 96, 0.12)',
+                        tag_color: '#d81b60',
+                        tag_border: 'rgba(216, 27, 96, 0.25)',
+                        icon: 'fa-solid fa-gem',
+                        filter_source: 'Tanishq',
+                        site_label: 'Tanishq Site'
+                    },
+                    mmtc: {
+                        brand: 'MMTC-PAMP',
+                        card_class: 'mmtc-card',
+                        title: 'MMTC-PAMP Live Rates',
+                        tag: 'LBMA REFINERY RATE',
+                        badge_bg: 'rgba(197, 160, 89, 0.15)',
+                        badge_color: 'var(--gold-primary)',
+                        tag_bg: 'rgba(197, 160, 89, 0.12)',
+                        tag_color: 'var(--gold-primary)',
+                        tag_border: 'rgba(197, 160, 89, 0.25)',
+                        icon: 'fa-solid fa-building-columns',
+                        filter_source: 'MMTC-PAMP',
+                        site_label: 'MMTC Site'
+                    },
+                    bhima: {
+                        brand: 'Bhima Gold',
+                        card_class: 'bhima-card',
+                        title: 'Bhima Gold Live Rates',
+                        tag: 'OFFICIAL DEALER RATE',
+                        badge_bg: 'rgba(197, 160, 89, 0.15)',
+                        badge_color: 'var(--gold-primary)',
+                        tag_bg: 'rgba(197, 160, 89, 0.12)',
+                        tag_color: 'var(--gold-primary)',
+                        tag_border: 'rgba(197, 160, 89, 0.25)',
+                        icon: 'fa-solid fa-gem',
+                        filter_source: 'Bhima Gold',
+                        site_label: 'Shop Bhima'
+                    }
+                };
+
+                const list = [];
+                keys.forEach((key) => {
+                    const data = this.dealerRates[key];
+                    if (data && cardConfigs[key]) {
+                        list.push({
+                            key,
+                            ...cardConfigs[key],
+                            data,
+                            sub_text: data.location ? `${data.location} Official Rate` : (data.tagline || 'Official Online Rate'),
+                            rate_24k: numeric(data.rate_24k_per_g)
+                        });
+                    }
+                });
+
+                // Sort LOW TO HIGH by 24K per gram rate
+                list.sort((a, b) => a.rate_24k - b.rate_24k);
+
+                // Assign Rank (#1 Lowest Rate, #2, etc.)
+                list.forEach((item, index) => {
+                    item.rank = index + 1;
+                });
+
+                return list;
+            },
+
             scanTrendSeries() {
                 return [...this.scans].slice(0, 10).reverse();
             },
@@ -305,6 +434,15 @@
         },
 
         methods: {
+            onSortByChange() {
+                if (this.sortBy === 'selling_price' || this.sortBy === 'price_per_gram') {
+                    this.sortOrder = 'asc';
+                } else if (this.sortBy === 'discount_percent' || this.sortBy === 'weight_grams') {
+                    this.sortOrder = 'desc';
+                }
+                this.currentPage = 1;
+            },
+
             toggleSidebar() {
                 this.sidebarCollapsed = !this.sidebarCollapsed;
             },

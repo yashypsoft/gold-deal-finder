@@ -195,29 +195,32 @@
 
                 <!-- Product Deck View -->
                 <div v-if="activeTab === 'products'">
-                    <!-- Dealer Rates Banner Strip -->
-                    <div class="dealer-rates-container" v-if="dealerRates && dealerRates.bhima">
-                        <div class="rate-banner-card bhima-card">
+                    <!-- Dealer Rates Banner Strip (Sorted Low to High Price) -->
+                    <div class="dealer-rates-container" v-if="dealerRates && sortedDealerRates.length">
+                        <div v-for="card in sortedDealerRates" :key="card.key" class="rate-banner-card" :class="card.card_class">
                             <div class="rate-banner-header">
                                 <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(197, 160, 89, 0.15); color: var(--gold-primary);">
-                                        <i class="fa-solid fa-gem"></i>
+                                    <span class="brand-badge-icon" :style="{ background: card.badge_bg, color: card.badge_color }">
+                                        <i :class="card.icon"></i>
                                     </span>
                                     <div>
-                                        <h4 class="rate-banner-title">Bhima Gold Live Rates</h4>
-                                        <span class="rate-banner-sub">Direct API landed rate card</span>
+                                        <h4 class="rate-banner-title">{{ card.title }}</h4>
+                                        <span class="rate-banner-sub">{{ card.sub_text }}</span>
                                     </div>
                                 </div>
-                                <span class="rate-banner-tag">OFFICIAL DEALER RATE</span>
+                                <span class="rate-banner-tag" :style="{ background: card.rank === 1 ? 'rgba(21, 128, 61, 0.15)' : card.tag_bg, color: card.rank === 1 ? 'var(--success)' : card.tag_color, borderColor: card.rank === 1 ? 'rgba(21, 128, 61, 0.3)' : card.tag_border }">
+                                    <i class="fa-solid fa-trophy" v-if="card.rank === 1" style="margin-right: 3px;"></i>
+                                    {{ card.rank === 1 ? '#1 LOWEST RATE' : '#' + card.rank + ' ' + card.tag }}
+                                </span>
                             </div>
 
                             <div class="rate-banner-body">
                                 <div class="rate-metric">
                                     <span class="rate-label">24K Gold Rate (999)</span>
                                     <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.bhima.rate_24k_per_g) }}<span class="unit">/g</span>
+                                        <span class="currency-symbol">₹</span>{{ formatNumber(card.data.rate_24k_per_g) }}<span class="unit">/g</span>
                                     </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.bhima.rate_24k_10g) }} per 10g bar</span>
+                                    <span class="rate-footnote">₹{{ formatNumber(card.data.rate_24k_10g) }} per 10g bar</span>
                                 </div>
 
                                 <div class="rate-divider"></div>
@@ -225,298 +228,18 @@
                                 <div class="rate-metric">
                                     <span class="rate-label">22K Gold Rate (916)</span>
                                     <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.bhima.rate_22k_per_g) }}<span class="unit">/g</span>
+                                        <span class="currency-symbol">₹</span>{{ formatNumber(card.data.rate_22k_per_g) }}<span class="unit">/g</span>
                                     </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.bhima.rate_22k_8g) }} per 8g coin</span>
+                                    <span class="rate-footnote">₹{{ formatNumber(card.data.rate_22k_8g) }} per 8g coin</span>
                                 </div>
 
                                 <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Bhima Gold'">
+                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = card.filter_source">
                                         <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Bhima</span>
+                                        <span>Filter {{ card.brand }}</span>
                                     </button>
-                                    <a :href="dealerRates.bhima.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Shop Bhima</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Kalyan Jewellers Live Rate Card -->
-                        <div class="rate-banner-card kalyan-card" v-if="dealerRates.kalyan">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(197, 160, 89, 0.15); color: var(--gold-primary);">
-                                        <i class="fa-solid fa-crown"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">Kalyan Jewellers Rates</h4>
-                                        <span class="rate-banner-sub">{{ dealerRates.kalyan.location }} Official Board Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(21, 128, 61, 0.12); color: var(--success); border-color: rgba(21, 128, 61, 0.25);">LIVE BOARD RATE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K Gold Rate (Est.)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.kalyan.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.kalyan.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (916)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.kalyan.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.kalyan.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Candere'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Kalyan/Candere</span>
-                                    </button>
-                                    <a :href="dealerRates.kalyan.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Kalyan Rates</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Tanishq (Titan) Live Rate Card -->
-                        <div class="rate-banner-card tanishq-card" v-if="dealerRates.tanishq">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(197, 160, 89, 0.15); color: var(--gold-primary);">
-                                        <i class="fa-solid fa-ring"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">Tanishq (Tata) Rates</h4>
-                                        <span class="rate-banner-sub">{{ dealerRates.tanishq.location }} Official Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(197, 160, 89, 0.12); color: var(--gold-primary); border-color: rgba(197, 160, 89, 0.25);">TATA BRAND RATE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K Gold Rate (999)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.tanishq.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.tanishq.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (916)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.tanishq.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.tanishq.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Tanishq'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Tanishq</span>
-                                    </button>
-                                    <a :href="dealerRates.tanishq.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Tanishq Rates</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- MMTC-PAMP LBMA Live Rate Card -->
-                        <div class="rate-banner-card mmtc-card" v-if="dealerRates.mmtc">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(197, 160, 89, 0.15); color: var(--gold-primary);">
-                                        <i class="fa-solid fa-coins"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">MMTC-PAMP Rates</h4>
-                                        <span class="rate-banner-sub">LBMA Accredited Refinery Live Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(59, 130, 246, 0.12); color: #2563eb; border-color: rgba(59, 130, 246, 0.25);">REFINERY LIVE QUOTE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K 999.9 Fine Gold</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.mmtc.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.mmtc.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (Est.)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.mmtc.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.mmtc.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'MMTC-PAMP'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter MMTC</span>
-                                    </button>
-                                    <a :href="dealerRates.mmtc.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>MMTC Shop</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Jos Alukkas Card -->
-                        <div class="rate-banner-card josalukkas-card" v-if="dealerRates.josalukkas">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(230, 81, 0, 0.15); color: #e65100;">
-                                        <i class="fa-solid fa-gem"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">Jos Alukkas Rates</h4>
-                                        <span class="rate-banner-sub">Official Online Board Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(230, 81, 0, 0.12); color: #e65100; border-color: rgba(230, 81, 0, 0.25);">OFFICIAL BOARD RATE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K Gold Rate (999)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.josalukkas.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.josalukkas.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (916)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.josalukkas.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.josalukkas.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Jos Alukkas'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Jos Alukkas</span>
-                                    </button>
-                                    <a :href="dealerRates.josalukkas.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Jos Alukkas Site</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="rate-banner-card joyalukkas-card" v-if="dealerRates.joyalukkas">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(198, 40, 40, 0.15); color: #c62828;">
-                                        <i class="fa-solid fa-crown"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">Joyalukkas Rates</h4>
-                                        <span class="rate-banner-sub">Official Online Board Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(198, 40, 40, 0.12); color: #c62828; border-color: rgba(198, 40, 40, 0.25);">OFFICIAL BOARD RATE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K Gold Rate (999)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.joyalukkas.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.joyalukkas.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (916)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.joyalukkas.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.joyalukkas.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Joyalukkas'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Joyalukkas</span>
-                                    </button>
-                                    <a :href="dealerRates.joyalukkas.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Joyalukkas Site</span>
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="rate-banner-card malabar-card" v-if="dealerRates.malabar">
-                            <div class="rate-banner-header">
-                                <div class="rate-banner-brand">
-                                    <span class="brand-badge-icon" style="background: rgba(183, 28, 28, 0.15); color: #b71c1c;">
-                                        <i class="fa-solid fa-coins"></i>
-                                    </span>
-                                    <div>
-                                        <h4 class="rate-banner-title">Malabar Gold Rates</h4>
-                                        <span class="rate-banner-sub">Official Online Board Rate</span>
-                                    </div>
-                                </div>
-                                <span class="rate-banner-tag" style="background: rgba(183, 28, 28, 0.12); color: #b71c1c; border-color: rgba(183, 28, 28, 0.25);">OFFICIAL BOARD RATE</span>
-                            </div>
-
-                            <div class="rate-banner-body">
-                                <div class="rate-metric">
-                                    <span class="rate-label">24K Gold Rate (999)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.malabar.rate_24k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.malabar.rate_24k_10g) }} per 10g bar</span>
-                                </div>
-
-                                <div class="rate-divider"></div>
-
-                                <div class="rate-metric">
-                                    <span class="rate-label">22K Gold Rate (916)</span>
-                                    <div class="rate-value">
-                                        <span class="currency-symbol">₹</span>{{ formatNumber(dealerRates.malabar.rate_22k_per_g) }}<span class="unit">/g</span>
-                                    </div>
-                                    <span class="rate-footnote">₹{{ formatNumber(dealerRates.malabar.rate_22k_8g) }} per 8g coin</span>
-                                </div>
-
-                                <div class="rate-actions">
-                                    <button class="btn-secondary" style="height: 32px; font-size: 0.75rem; gap: 0.35rem;" @click="filters.source = 'Malabar Gold'">
-                                        <i class="fa-solid fa-filter"></i>
-                                        <span>Filter Malabar</span>
-                                    </button>
-                                    <a :href="dealerRates.malabar.source_url" target="_blank" rel="noopener" class="btn-rate-link">
-                                        <span>Malabar Site</span>
+                                    <a :href="card.data.source_url" target="_blank" rel="noopener" class="btn-rate-link">
+                                        <span>{{ card.site_label }}</span>
                                         <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                     </a>
                                 </div>
@@ -564,7 +287,7 @@
                             </select>
 
                             <!-- Sort By -->
-                            <select class="select-control" v-model="sortBy">
+                            <select class="select-control" v-model="sortBy" @change="onSortByChange">
                                 <option value="discount_percent">Sort: Best Discount</option>
                                 <option value="price_per_gram">Sort: Lowest Price/g</option>
                                 <option value="selling_price">Sort: Lowest Total Price</option>

@@ -360,20 +360,42 @@ class GoldScraper:
         print("🔄 Scraping AJIO...")
         products = []
 
+        headers = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+            'referer': 'https://www.ajio.com/search/?text=gold%20coin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+
+        try:
+            from curl_cffi import requests as cffi_requests
+            session = cffi_requests.Session(impersonate='chrome120')
+            # Warm up session on search landing page to get Akamai cookies
+            session.get('https://www.ajio.com/search/?text=gold%20coin', headers=headers, timeout=12)
+        except Exception as e:
+            print(f"cffi session init warning: {e}")
+            session = requests.Session()
+
         def fetch_page(page: int):
-            params = SEARCH_PARAMS['ajio'].copy()
-            params['currentPage'] = page
+            params = {
+                'fields': 'SITE',
+                'currentPage': page,
+                'pageSize': 45,
+                'format': 'json',
+                'query': 'gold coin:relevance',
+                'gridDensity': '3'
+            }
 
             try:
-                r = requests.get(
+                r = session.get(
                     AJIO_API_URL,
                     params=params,
-                    headers=self.ajio_headers,
-                    timeout=10
+                    headers=headers,
+                    timeout=12
                 )
 
                 if r.status_code != 200:
-                    print(f"Page {page} failed")
+                    print(f"Page {page} failed: {r.status_code}")
                     return []
 
                 data = r.json()
@@ -391,8 +413,9 @@ class GoldScraper:
                 print(f"Page {page} error: {e}")
                 return []
 
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
+        # Run sequential or threadpool requests using the warmed session
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futures = [ex.submit(fetch_page, p) for p in range(0, 12)]
 
             for f in as_completed(futures):
                 products.extend(f.result())
