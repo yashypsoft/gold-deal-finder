@@ -1,4 +1,4 @@
-/* Gold Deal Finder refresh */
+/* Gold Deal Finder 2026 Premium Fintech Application Engine */
 (function () {
     const DEFAULT_FILTERS = Object.freeze({
         source: '',
@@ -29,6 +29,12 @@
 
         data: {
             activeTab: 'products',
+            sidebarCollapsed: localStorage.getItem('goldSidebarCollapsed') === 'true',
+            commandPaletteOpen: false,
+            paletteQuery: '',
+            showFilterDrawer: false,
+            showSourcesInfo: false,
+
             loading: true,
             loadingProducts: false,
             refreshing: false,
@@ -38,8 +44,6 @@
             darkMode: localStorage.getItem('goldDarkMode') === 'true',
             windowWidth: window.innerWidth,
             mobileMenuOpen: false,
-            showMobileFilters: false,
-            showShortcuts: false,
 
             showScanModal: false,
             showExportModal: false,
@@ -59,6 +63,7 @@
                 historical: {},
             },
             spotPrice: null,
+            dealerRates: null,
             timeline: {
                 timeline: {},
                 total_scans: 0,
@@ -67,8 +72,8 @@
 
             filters: cloneFilters(),
             currentPage: 1,
-            itemsPerPage: 12,
-            pageSizeOptions: [12, 24, 48],
+            itemsPerPage: 24,
+            pageSizeOptions: [24, 48, 96],
             sortBy: 'discount_percent',
             sortOrder: 'desc',
 
@@ -82,9 +87,9 @@
             scanTrendChart: null,
 
             shortcuts: [
-                { key: 'Ctrl/Cmd + F', action: 'Focus search' },
-                { key: 'Ctrl/Cmd + R', action: 'Refresh dashboard' },
-                { key: 'Ctrl/Cmd + N', action: 'Open scan dialog' },
+                { key: 'Ctrl/Cmd + K', action: 'Command Palette' },
+                { key: 'Ctrl/Cmd + F', action: 'Search products' },
+                { key: 'Ctrl/Cmd + R', action: 'Refresh data' },
                 { key: 'Ctrl/Cmd + D', action: 'Toggle theme' },
                 { key: 'Esc', action: 'Close overlays' },
             ],
@@ -184,7 +189,9 @@
             },
 
             uniqueSources() {
-                return [...new Set(this.allProducts.map((product) => product.source).filter(Boolean))].sort();
+                const ALL_KNOWN = ['AJIO', 'Myntra', 'Candere', 'Bhima Gold', 'Tanishq', 'MMTC-PAMP', 'Jos Alukkas', 'Joyalukkas', 'Malabar Gold'];
+                const fromProducts = this.allProducts.map((product) => product.source).filter(Boolean);
+                return [...new Set([...ALL_KNOWN, ...fromProducts])].sort();
             },
 
             uniquePurities() {
@@ -209,26 +216,6 @@
                 return numeric(this.spotPrice?.gold?.per_gram?.['999_landed']);
             },
 
-            totalInventoryValue() {
-                return this.allProducts.reduce((sum, product) => sum + numeric(product.selling_price), 0);
-            },
-
-            averageDiscount() {
-                if (!this.allProducts.length) return 0;
-                const total = this.allProducts.reduce((sum, product) => sum + numeric(product.discount_percent), 0);
-                return total / this.allProducts.length;
-            },
-
-            averagePricePerGram() {
-                if (!this.allProducts.length) return 0;
-                const total = this.allProducts.reduce((sum, product) => sum + numeric(product.price_per_gram), 0);
-                return total / this.allProducts.length;
-            },
-
-            goodDealsCount() {
-                return this.allProducts.filter((product) => numeric(product.discount_percent) >= 10).length;
-            },
-
             bestCurrentDeal() {
                 if (!this.allProducts.length) return null;
                 return [...this.allProducts].sort((a, b) => numeric(b.discount_percent) - numeric(a.discount_percent))[0];
@@ -249,14 +236,6 @@
 
             scanTrendSeries() {
                 return [...this.scans].slice(0, 10).reverse();
-            },
-
-            historicalStats() {
-                return this.summaryStats.historical || {};
-            },
-
-            latestProductsPreview() {
-                return [...this.sortedProducts].slice(0, 4);
             },
         },
 
@@ -297,8 +276,17 @@
             scans() {
                 this.$nextTick(() => this.renderCharts());
             },
-            timeline() {
-                this.$nextTick(() => this.renderCharts());
+            sidebarCollapsed(value) {
+                localStorage.setItem('goldSidebarCollapsed', String(value));
+            },
+            commandPaletteOpen(value) {
+                if (value) {
+                    this.$nextTick(() => {
+                        if (this.$refs.paletteInput) {
+                            this.$refs.paletteInput.focus();
+                        }
+                    });
+                }
             },
         },
 
@@ -317,6 +305,43 @@
         },
 
         methods: {
+            toggleSidebar() {
+                this.sidebarCollapsed = !this.sidebarCollapsed;
+            },
+
+            switchTab(tab) {
+                this.activeTab = tab;
+                this.mobileMenuOpen = false;
+                this.showFilterDrawer = false;
+                this.commandPaletteOpen = false;
+                if (tab === 'insights') {
+                    this.$nextTick(() => this.renderCharts());
+                }
+            },
+
+            getSavingsRupees(product) {
+                return numeric(product.expected_price) - numeric(product.selling_price);
+            },
+
+            getSavingsRupeesFormatted(product) {
+                const diff = this.getSavingsRupees(product);
+                if (diff >= 0) {
+                    return `₹${Math.round(diff).toLocaleString('en-IN')} cheaper`;
+                }
+                return `₹${Math.abs(Math.round(diff)).toLocaleString('en-IN')} premium`;
+            },
+
+            isTopTierDeal(product) {
+                const diff = this.getSavingsRupees(product);
+                const discount = numeric(product.discount_percent);
+                return diff >= 1000 || discount >= 5;
+            },
+
+            runScanCommand() {
+                this.commandPaletteOpen = false;
+                this.startNewScan();
+            },
+
             async boot() {
                 this.loading = true;
                 this.bootError = '';
@@ -341,6 +366,7 @@
                     this.fetchScans(),
                     this.fetchSummaryStats(),
                     this.fetchSpotPrice(),
+                    this.fetchDealerRates(),
                     this.fetchTimeline(),
                 ]);
 
@@ -352,7 +378,7 @@
             },
 
             async fetchScans() {
-                const response = await axios.get('/api/v1/historical/scans?limit=14');
+                const response = await axios.get('/api/v1/historical/scans?limit=30');
                 this.scans = safeArray(response.data);
                 if (this.scans.length) {
                     this.latestScanId = this.scans[0].scan_id;
@@ -371,6 +397,15 @@
             async fetchSpotPrice() {
                 const response = await axios.get('/api/v1/spot-price');
                 this.spotPrice = response.data || null;
+            },
+
+            async fetchDealerRates() {
+                try {
+                    const response = await axios.get('/api/v1/dealer-rates');
+                    this.dealerRates = response.data || null;
+                } catch (err) {
+                    console.error('Failed to fetch dealer rates', err);
+                }
             },
 
             async fetchTimeline() {
@@ -407,9 +442,9 @@
                         this.activeTab = 'products';
                     }
                     this.mobileMenuOpen = false;
-                    this.showMobileFilters = false;
+                    this.showFilterDrawer = false;
                     if (!silent) {
-                        this.showNotification('info', this.selectedScanIsLatest ? 'Loaded latest scan.' : 'Loaded archived scan.');
+                        this.showNotification('info', this.selectedScanIsLatest ? 'Loaded latest scan dataset.' : `Loaded archived scan ${scanId}.`);
                     }
                 } catch (error) {
                     const message = this.getErrorMessage(error, 'Unable to load scan details.');
@@ -429,7 +464,7 @@
                 this.bootError = '';
                 try {
                     await this.refreshDashboardData({ preserveSelection: true, clearCache: true });
-                    this.showNotification('success', 'Dashboard refreshed.');
+                    this.showNotification('success', 'Dashboard refreshed successfully.');
                 } catch (error) {
                     this.showNotification('error', this.getErrorMessage(error, 'Refresh failed.'));
                 } finally {
@@ -442,7 +477,7 @@
                 try {
                     const response = await axios.get('/api/v1/scan');
                     this.showScanModal = false;
-                    this.showNotification('success', response.data?.message || 'Scan completed.');
+                    this.showNotification('success', response.data?.message || 'Scan completed successfully.');
                     await this.refreshDashboardData({ preserveSelection: false, clearCache: true });
                     await this.loadLatestScan({ silent: true });
                 } catch (error) {
@@ -457,7 +492,7 @@
                     const response = await axios.get('/api/v1/historical/scans?limit=1');
                     const latest = safeArray(response.data)[0];
                     if (latest && latest.scan_id !== this.latestScanId) {
-                        this.showNotification('info', 'New scan detected. Refreshing archive.');
+                        this.showNotification('info', 'New scan detected. Updating dashboard.');
                         await this.refreshDashboardData({ preserveSelection: true, clearCache: false });
                     }
                 } catch (error) {
@@ -468,7 +503,7 @@
             handleResize() {
                 this.windowWidth = window.innerWidth;
                 if (this.isDesktop) {
-                    this.showMobileFilters = false;
+                    this.showFilterDrawer = false;
                     this.mobileMenuOpen = false;
                 }
             },
@@ -479,7 +514,7 @@
                 if (this.exportFormat === 'json') {
                     this.downloadBlob(JSON.stringify(rows, null, 2), `${fileBase}.json`, 'application/json');
                 } else {
-                    const headers = ['Source', 'Brand', 'Title', 'Purity', 'Weight (g)', 'Price', 'Expected', 'Discount %', 'Price/g', 'URL'];
+                    const headers = ['Source', 'Brand', 'Title', 'Purity', 'Weight (g)', 'Price', 'Expected', 'Savings (INR)', 'Discount %', 'Price/g', 'URL'];
                     const csvRows = rows.map((product) => [
                         product.source,
                         product.brand,
@@ -488,6 +523,7 @@
                         numeric(product.weight_grams),
                         numeric(product.selling_price),
                         numeric(product.expected_price),
+                        this.getSavingsRupees(product),
                         numeric(product.discount_percent),
                         numeric(product.price_per_gram),
                         product.url,
@@ -496,7 +532,7 @@
                     this.downloadBlob(csv, `${fileBase}.csv`, 'text/csv;charset=utf-8');
                 }
                 this.showExportModal = false;
-                this.showNotification('success', 'Export ready.');
+                this.showNotification('success', 'Export complete.');
             },
 
             downloadBlob(content, filename, mimeType) {
@@ -511,7 +547,7 @@
 
             resetFilters() {
                 this.filters = cloneFilters();
-                this.showNotification('info', 'Filters reset.');
+                this.showNotification('info', 'Filters reset to default.');
             },
 
             toggleFavorite(product) {
@@ -529,32 +565,15 @@
                 return this.favorites.includes(product.url);
             },
 
-            viewProductDetails(product) {
-                this.selectedProduct = product;
-            },
-
             closeAllPanels() {
                 this.mobileMenuOpen = false;
-                this.showMobileFilters = false;
-                this.showShortcuts = false;
+                this.showFilterDrawer = false;
+                this.commandPaletteOpen = false;
                 this.showScanModal = false;
                 this.showExportModal = false;
                 this.showFavoritesModal = false;
+                this.showSourcesInfo = false;
                 this.selectedProduct = null;
-            },
-
-            shareProduct(product) {
-                const shareData = {
-                    title: product.title,
-                    text: `${product.brand || product.source} · ${this.formatPercent(product.discount_percent)} · ${this.formatCurrency(product.selling_price)}`,
-                    url: product.url,
-                };
-                if (navigator.share) {
-                    navigator.share(shareData).catch(() => {});
-                    return;
-                }
-                navigator.clipboard.writeText(product.url);
-                this.showNotification('success', 'Product link copied.');
             },
 
             copyToClipboard(text, successMessage = 'Copied.') {
@@ -564,7 +583,7 @@
             },
 
             handleImageError(event) {
-                event.target.src = 'https://placehold.co/640x640/f1e7cf/4f3a14?text=Gold+Deal';
+                event.target.src = 'https://placehold.co/400x400/faf8f5/c5a059?text=Gold+Deal';
             },
 
             focusSearch() {
@@ -592,6 +611,10 @@
                 return `₹${numeric(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
             },
 
+            formatNumber(value) {
+                return numeric(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            },
+
             formatWeight(value) {
                 const amount = numeric(value);
                 if (amount >= 1000) {
@@ -602,7 +625,7 @@
 
             formatPercent(value) {
                 const amount = numeric(value);
-                return `${amount.toFixed(1)}%`;
+                return `${amount > 0 ? '+' : ''}${amount.toFixed(1)}%`;
             },
 
             formatDateTime(value) {
@@ -621,22 +644,7 @@
                 return new Date(value).toLocaleDateString('en-IN', {
                     day: '2-digit',
                     month: 'short',
-                    year: 'numeric',
                 });
-            },
-
-            formatTimeAgo(value) {
-                if (!value) return 'Unknown';
-                const diffMs = Date.now() - new Date(value).getTime();
-                const diffHours = Math.round(diffMs / (1000 * 60 * 60));
-                if (diffHours < 1) return 'Less than 1 hour ago';
-                if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-                const diffDays = Math.round(diffHours / 24);
-                return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-            },
-
-            discountTone(value) {
-                return numeric(value) >= 0 ? 'tone-positive' : 'tone-negative';
             },
 
             getErrorMessage(error, fallback) {
@@ -681,6 +689,10 @@
             },
 
             handleKeyDown(event) {
+                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+                    event.preventDefault();
+                    this.commandPaletteOpen = !this.commandPaletteOpen;
+                }
                 if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
                     event.preventDefault();
                     this.focusSearch();
@@ -688,10 +700,6 @@
                 if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
                     event.preventDefault();
                     this.refreshData();
-                }
-                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n') {
-                    event.preventDefault();
-                    this.showScanModal = true;
                 }
                 if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
                     event.preventDefault();
@@ -734,7 +742,7 @@
                         labels,
                         datasets: [{
                             data,
-                            backgroundColor: ['#d6a648', '#8f6a20', '#3d6a80', '#7a3f29', '#5b7f58'],
+                            backgroundColor: ['#c5a059', '#8f6a20', '#3d6a80', '#7a3f29', '#5b7f58'],
                             borderWidth: 0,
                         }],
                     },
@@ -744,7 +752,8 @@
                         plugins: {
                             legend: {
                                 labels: {
-                                    color: this.darkMode ? '#f8f3e7' : '#3d3122',
+                                    color: this.darkMode ? '#f0f2f5' : '#1a1a1a',
+                                    font: { family: 'Plus Jakarta Sans', size: 12 }
                                 },
                             },
                         },
@@ -765,18 +774,18 @@
                         labels: this.scanTrendSeries.map((scan) => this.formatDate(scan.timestamp)),
                         datasets: [
                             {
-                                label: 'Products',
+                                label: 'Total Products',
                                 data: this.scanTrendSeries.map((scan) => numeric(scan.total_products)),
-                                borderColor: '#d6a648',
-                                backgroundColor: 'rgba(214, 166, 72, 0.18)',
+                                borderColor: '#c5a059',
+                                backgroundColor: 'rgba(197, 160, 89, 0.15)',
                                 fill: true,
                                 tension: 0.35,
                             },
                             {
-                                label: 'Good deals',
+                                label: 'Good Deals',
                                 data: this.scanTrendSeries.map((scan) => numeric(scan.good_deals)),
-                                borderColor: '#3d6a80',
-                                backgroundColor: 'rgba(61, 106, 128, 0.12)',
+                                borderColor: '#15803d',
+                                backgroundColor: 'rgba(21, 128, 61, 0.1)',
                                 fill: true,
                                 tension: 0.35,
                             },
@@ -788,18 +797,19 @@
                         plugins: {
                             legend: {
                                 labels: {
-                                    color: this.darkMode ? '#f8f3e7' : '#3d3122',
+                                    color: this.darkMode ? '#f0f2f5' : '#1a1a1a',
+                                    font: { family: 'Plus Jakarta Sans', size: 12 }
                                 },
                             },
                         },
                         scales: {
                             x: {
-                                ticks: { color: this.darkMode ? '#d9d1c2' : '#6f5d46' },
-                                grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(61,49,34,0.06)' },
+                                ticks: { color: this.darkMode ? '#9ca3af' : '#5e5953' },
+                                grid: { color: this.darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
                             },
                             y: {
-                                ticks: { color: this.darkMode ? '#d9d1c2' : '#6f5d46' },
-                                grid: { color: this.darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(61,49,34,0.06)' },
+                                ticks: { color: this.darkMode ? '#9ca3af' : '#5e5953' },
+                                grid: { color: this.darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
                             },
                         },
                     },
