@@ -609,52 +609,44 @@ async def get_spot_price():
 
 def _fetch_dealer_rates_sync() -> Dict[str, Any]:
     import requests, re
-    headers_bhima = {
-        'Accept': 'application/json, text/plain, */*',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    terms = ['gold+coin', 'gold+bar']
-    r_24k = []
-    r_22k = []
-    
-    for term in terms:
-        url = f'https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&sortBy=&searchTerm[]={term}&pageNumber=1&country=en-IN'
-        try:
-            r = requests.get(url, headers=headers_bhima, timeout=8)
-            if r.status_code == 200:
-                pl = r.json().get('data', {}).get('productList', [])
-                for p in pl:
-                    title = p.get('title', '')
-                    raw_price = float(p.get('converted_special_price', 0) or 0)
-                    price = raw_price / 100.0 if raw_price > 100000 else raw_price
-                    
-                    w_match = re.search(r'(\d+\.?\d*)\s*(?:gm|grams|g)\b', title, re.I)
-                    weight = float(w_match.group(1)) if w_match else None
-                    
-                    purity = '24K' if ('24k' in title.lower() or '24kt' in title.lower() or '999' in title) else ('22K' if ('22k' in title.lower() or '916' in title) else None)
-                    
-                    if weight and purity and price > 1000:
-                        rate_per_g = price / weight
-                        if purity == '24K':
-                            r_24k.append(rate_per_g)
-                        else:
-                            r_22k.append(rate_per_g)
-        except Exception:
-            pass
 
-    rate_24k_g = round(min(r_24k), 2) if r_24k else 16943.60
-    rate_22k_g = round(min(r_22k), 2) if r_22k else 15525.38
-    
+    # Fetch Bhima Gold Live Board Rates directly from bhimagold.com homepage
     bhima_data = {
         "brand": "Bhima Gold",
-        "tagline": "Official Live Dealer Rate",
-        "rate_24k_per_g": rate_24k_g,
-        "rate_22k_per_g": rate_22k_g,
-        "rate_24k_10g": round(rate_24k_g * 10, 2),
-        "rate_22k_8g": round(rate_22k_g * 8, 2),
+        "tagline": "Official Live Board Rate",
+        "rate_24k_per_g": 15519.00,
+        "rate_22k_per_g": 13699.00,
+        "rate_24k_10g": 155190.00,
+        "rate_22k_8g": 109592.00,
         "updated_at": datetime.now().isoformat(),
         "source_url": "https://www.bhimagold.com"
     }
+    try:
+        try:
+            from curl_cffi import requests as cffi_requests
+            r_bhima = cffi_requests.get('https://www.bhimagold.com/', headers={
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }, impersonate='chrome120', timeout=8)
+        except Exception:
+            r_bhima = requests.get('https://www.bhimagold.com/', headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+            }, timeout=8)
+
+        if r_bhima.status_code == 200:
+            m_24k = re.search(r'\"Online Gold Rate 24 KT \(999\)\"\s*,\s*\"rate\"\s*:\s*\"₹?\s*([\d,]+\.?\d*)\s*\/g\"', r_bhima.text)
+            m_22k = re.search(r'\"Online Gold Rate 22 KT \(916\)\"\s*,\s*\"rate\"\s*:\s*\"₹?\s*([\d,]+\.?\d*)\s*\/g\"', r_bhima.text)
+            r24 = float(m_24k.group(1).replace(',', '')) if m_24k else 15519.0
+            r22 = float(m_22k.group(1).replace(',', '')) if m_22k else 13699.0
+            bhima_data.update({
+                "rate_24k_per_g": r24,
+                "rate_22k_per_g": r22,
+                "rate_24k_10g": round(r24 * 10, 2),
+                "rate_22k_8g": round(r22 * 8, 2),
+                "updated_at": datetime.now().isoformat()
+            })
+    except Exception as e:
+        print(f"Error fetching Bhima Gold rates: {e}")
 
     # Fetch Kalyan Jewellers Rate
     kalyan_data = {
