@@ -135,6 +135,9 @@ def error_detail(code: str, message: str, **extra: Any) -> Dict[str, Any]:
 def get_all_scan_files() -> List[Path]:
     scan_files = list(DATA_DIR.glob("scan_results_*.json"))
     scan_files.extend(DATA_DIR.glob("scan_results_*.json.gz"))
+    latest_file = DATA_DIR.joinpath("latest_scan.json")
+    if latest_file.exists():
+        scan_files.append(latest_file)
     return sorted(scan_files, key=lambda path: path.stat().st_mtime, reverse=True)
 
 
