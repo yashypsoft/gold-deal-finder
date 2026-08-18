@@ -878,41 +878,13 @@ class GoldScraper:
             if not purity:
                 purity = '22K'
 
-            # 1. Extract explicit gross weight / metal weight from product object attributes or variants if available
-            weight = None
-            for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'GrossWeight', 'NetWeight']:
-                val = p.get(key)
-                if val:
-                    m = re.search(r'(\d+\.?\d*)', str(val))
-                    if m:
-                        w = float(m.group(1))
-                        if 0.3 <= w <= 5000:
-                            weight = w
-                            break
-
-            if not weight:
-                for v in p.get('variantItems', []):
-                    eattrs = v.get('_eattrs', {}) if isinstance(v, dict) else {}
-                    for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'Weight(gram)']:
-                        val = eattrs.get(key) or (v.get(key) if isinstance(v, dict) else None)
-                        if val:
-                            m = re.search(r'(\d+\.?\d*)', str(val))
-                            if m:
-                                w = float(m.group(1))
-                                if 0.3 <= w <= 5000:
-                                    weight = w
-                                    break
-                    if weight:
-                        break
-
-            if not weight and title_weight and title_weight >= 0.3:
-                weight = title_weight
-
             slug = p.get('slug', '')
             landing_url = f"https://www.bhimagold.com/products/{slug}" if slug else "https://www.bhimagold.com"
 
-            # 2. Fetch product detail page HTML to extract exact metal_weight / gross_weight if available
-            if not weight and slug:
+            weight = None
+
+            # PRIORITY 1: Always open product page to extract exact metal_weight (or gross_weight / weight) first
+            if slug:
                 try:
                     r_pdp = session.get(landing_url, headers=headers, timeout=5)
                     if r_pdp.status_code == 200:
@@ -930,6 +902,37 @@ class GoldScraper:
                 except Exception:
                     pass
 
+            # PRIORITY 2: Check product object attributes / variantItems if PDP did not yield weight
+            if not weight:
+                for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'GrossWeight', 'NetWeight']:
+                    val = p.get(key)
+                    if val:
+                        m = re.search(r'(\d+\.?\d*)', str(val))
+                        if m:
+                            w = float(m.group(1))
+                            if 0.3 <= w <= 5000:
+                                weight = w
+                                break
+
+            if not weight:
+                for v in p.get('variantItems', []):
+                    eattrs = v.get('_eattrs', {}) if isinstance(v, dict) else {}
+                    for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'Weight(gram)']:
+                        val = eattrs.get(key) or (v.get(key) if isinstance(v, dict) else None)
+                        if val:
+                            m = re.search(r'(\d+\.?\d*)', str(val))
+                            if m:
+                                w = float(m.group(1))
+                                if 0.3 <= w <= 5000:
+                                    weight = w
+                                    break
+                    if weight:
+                        break
+
+            # PRIORITY 3: Title weight
+            if not weight and title_weight and title_weight >= 0.3:
+                weight = title_weight
+
             raw_price = float(p.get('converted_special_price', 0) or 0)
             if raw_price <= 0:
                 return None
@@ -940,7 +943,7 @@ class GoldScraper:
             product_type = self.determine_product_type(title)
             is_jewellery = (product_type == 'jewellery')
 
-            # 3. If gross weight/metal weight is not found in page or attributes, estimate gross weight from selling price
+            # PRIORITY 4 (FALLBACK ONLY): Estimate weight from selling price if all above are missing
             if not weight or weight < 0.3:
                 rate_per_gram = rate_cache.get((purity, is_jewellery), 6500.0)
                 if rate_per_gram > 0:
