@@ -850,6 +850,10 @@ class GoldScraper:
 
     def scrape_bhima(self) -> List[Dict]:
         print("🔄 Scraping Bhima Gold...")
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=40, pool_maxsize=40)
+        session.mount('https://', adapter)
+
         headers = {
             'Accept': 'application/json, text/plain, */*',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -876,7 +880,7 @@ class GoldScraper:
 
             # 1. Extract explicit gross weight / metal weight from product object attributes or variants if available
             weight = None
-            for key in ['gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'metal_weight', 'weight', 'GrossWeight', 'NetWeight']:
+            for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'GrossWeight', 'NetWeight']:
                 val = p.get(key)
                 if val:
                     m = re.search(r'(\d+\.?\d*)', str(val))
@@ -889,7 +893,7 @@ class GoldScraper:
             if not weight:
                 for v in p.get('variantItems', []):
                     eattrs = v.get('_eattrs', {}) if isinstance(v, dict) else {}
-                    for key in ['gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'metal_weight', 'weight', 'Weight(gram)']:
+                    for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'Weight(gram)']:
                         val = eattrs.get(key) or (v.get(key) if isinstance(v, dict) else None)
                         if val:
                             m = re.search(r'(\d+\.?\d*)', str(val))
@@ -904,6 +908,28 @@ class GoldScraper:
             if not weight and title_weight and title_weight >= 0.3:
                 weight = title_weight
 
+            slug = p.get('slug', '')
+            landing_url = f"https://www.bhimagold.com/products/{slug}" if slug else "https://www.bhimagold.com"
+
+            # 2. Fetch product detail page HTML to extract exact metal_weight / gross_weight if available
+            if not weight and slug:
+                try:
+                    r_pdp = session.get(landing_url, headers=headers, timeout=5)
+                    if r_pdp.status_code == 200:
+                        mw_m = re.search(r'"metal_weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
+                        if mw_m:
+                            weight = float(mw_m.group(1))
+                        else:
+                            gw_m = re.search(r'"gross_weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
+                            if gw_m:
+                                weight = float(gw_m.group(1))
+                            else:
+                                w_m = re.search(r'"weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
+                                if w_m:
+                                    weight = float(w_m.group(1))
+                except Exception:
+                    pass
+
             raw_price = float(p.get('converted_special_price', 0) or 0)
             if raw_price <= 0:
                 return None
@@ -914,7 +940,7 @@ class GoldScraper:
             product_type = self.determine_product_type(title)
             is_jewellery = (product_type == 'jewellery')
 
-            # 2. If gross weight is not found in attributes or title, estimate gross weight from selling price
+            # 3. If gross weight/metal weight is not found in page or attributes, estimate gross weight from selling price
             if not weight or weight < 0.3:
                 rate_per_gram = rate_cache.get((purity, is_jewellery), 6500.0)
                 if rate_per_gram > 0:
@@ -928,8 +954,6 @@ class GoldScraper:
             discount_percent = self.price_calculator.calculate_discount_percentage(selling_price, expected_price)
             price_per_gram = selling_price / weight
 
-            slug = p.get('slug', '')
-            landing_url = f"https://www.bhimagold.com/products/{slug}" if slug else "https://www.bhimagold.com"
             img_url = p.get('image', '')
 
             return {
@@ -959,7 +983,7 @@ class GoldScraper:
             while True:
                 url = f'https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&sortBy=&searchTerm[]={term}&pageNumber={page}&country=en-IN'
                 try:
-                    r = requests.get(url, headers=headers, timeout=8)
+                    r = session.get(url, headers=headers, timeout=8)
                     if r.status_code != 200:
                         break
                     data = r.json().get('data', {})
@@ -981,7 +1005,7 @@ class GoldScraper:
             slug_products = []
             url = f'https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&metal=Gold&country=En-in&urlSlug=gold&pageNumber={page}'
             try:
-                r = requests.get(url, headers=headers, timeout=8)
+                r = session.get(url, headers=headers, timeout=8)
                 if r.status_code != 200:
                     return []
                 data = r.json().get('data', {})
@@ -997,7 +1021,7 @@ class GoldScraper:
         # Dynamically determine total pages for urlSlug=gold category
         total_pages = 165
         try:
-            r1 = requests.get('https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&metal=Gold&country=En-in&urlSlug=gold&pageNumber=1', headers=headers, timeout=8)
+            r1 = session.get('https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&metal=Gold&country=En-in&urlSlug=gold&pageNumber=1', headers=headers, timeout=8)
             if r1.status_code == 200:
                 count = r1.json().get('data', {}).get('count', 0)
                 if count > 0:
@@ -1005,7 +1029,7 @@ class GoldScraper:
         except Exception as e:
             print(f"Bhima Gold error fetching page count: {e}")
 
-        with ThreadPoolExecutor(max_workers=15) as ex:
+        with ThreadPoolExecutor(max_workers=25) as ex:
             futures = [ex.submit(fetch_term, term) for term in search_terms]
             futures.extend([ex.submit(fetch_slug_page, p) for p in range(1, total_pages + 1)])
             for f in as_completed(futures):
