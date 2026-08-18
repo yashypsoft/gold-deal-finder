@@ -854,15 +854,112 @@ class GoldScraper:
             'Accept': 'application/json, text/plain, */*',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        search_terms = ['gold+coin', 'gold+bar', '24k', '22k', 'coin']
+        search_terms = ['gold+coin', 'gold+bar', '24k', '22k', 'coin', 'bar']
         unique_map = {}
+
+        # Pre-cache rate per gram for fast weight estimation when title lacks weight
+        rate_cache = {}
+        for pur in ['24K', '22K', '18K', '14K']:
+            rate_cache[(pur, True)] = self.price_calculator.calculate_expected_price(1.0, pur, True)['total_expected']
+            rate_cache[(pur, False)] = self.price_calculator.calculate_expected_price(1.0, pur, False)['total_expected']
+
+        def process_product(p: Dict) -> Optional[Dict]:
+            title = p.get('title', '')
+            if not title or not is_real_gold_product(title):
+                return None
+            if 'silver' in title.lower():
+                return None
+
+            purity, title_weight = self.extract_purity_and_weight(title)
+            if not purity:
+                purity = '22K'
+
+            # 1. Extract explicit gross weight / metal weight from product object attributes or variants if available
+            weight = None
+            for key in ['gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'metal_weight', 'weight', 'GrossWeight', 'NetWeight']:
+                val = p.get(key)
+                if val:
+                    m = re.search(r'(\d+\.?\d*)', str(val))
+                    if m:
+                        w = float(m.group(1))
+                        if 0.3 <= w <= 5000:
+                            weight = w
+                            break
+
+            if not weight:
+                for v in p.get('variantItems', []):
+                    eattrs = v.get('_eattrs', {}) if isinstance(v, dict) else {}
+                    for key in ['gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'metal_weight', 'weight', 'Weight(gram)']:
+                        val = eattrs.get(key) or (v.get(key) if isinstance(v, dict) else None)
+                        if val:
+                            m = re.search(r'(\d+\.?\d*)', str(val))
+                            if m:
+                                w = float(m.group(1))
+                                if 0.3 <= w <= 5000:
+                                    weight = w
+                                    break
+                    if weight:
+                        break
+
+            if not weight and title_weight and title_weight >= 0.3:
+                weight = title_weight
+
+            raw_price = float(p.get('converted_special_price', 0) or 0)
+            if raw_price <= 0:
+                return None
+            selling_price = raw_price / 100.0 if raw_price > 100000 else raw_price
+            if selling_price < 1000:
+                return None
+
+            product_type = self.determine_product_type(title)
+            is_jewellery = (product_type == 'jewellery')
+
+            # 2. If gross weight is not found in attributes or title, estimate gross weight from selling price
+            if not weight or weight < 0.3:
+                rate_per_gram = rate_cache.get((purity, is_jewellery), 6500.0)
+                if rate_per_gram > 0:
+                    weight = round(selling_price / rate_per_gram, 2)
+
+            if not weight or weight < 0.3:
+                return None
+
+            expected_price_info = self.price_calculator.calculate_expected_price(weight, purity, is_jewellery)
+            expected_price = expected_price_info['total_expected']
+            discount_percent = self.price_calculator.calculate_discount_percentage(selling_price, expected_price)
+            price_per_gram = selling_price / weight
+
+            slug = p.get('slug', '')
+            landing_url = f"https://www.bhimagold.com/products/{slug}" if slug else "https://www.bhimagold.com"
+            img_url = p.get('image', '')
+
+            return {
+                'source': 'Bhima Gold',
+                'title': title,
+                'weight_grams': weight,
+                'purity': purity,
+                'product_type': product_type,
+                'is_jewellery': is_jewellery,
+                'selling_price': selling_price,
+                'original_price': selling_price,
+                'expected_price': round(expected_price, 2),
+                'discount_percent': discount_percent,
+                'price_per_gram': round(price_per_gram, 2),
+                'url': landing_url,
+                'image_url': img_url,
+                'brand': 'Bhima Gold',
+                'spot_price': expected_price_info['spot_price_per_gram'],
+                'making_charges_percent': expected_price_info['making_charges_percent'],
+                'gst_percent': expected_price_info['gst_percent'],
+                'timestamp': datetime.now().isoformat()
+            }
 
         def fetch_term(term: str):
             term_products = []
-            for page in range(1, 6):
+            page = 1
+            while True:
                 url = f'https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&sortBy=&searchTerm[]={term}&pageNumber={page}&country=en-IN'
                 try:
-                    r = requests.get(url, headers=headers, timeout=12)
+                    r = requests.get(url, headers=headers, timeout=8)
                     if r.status_code != 200:
                         break
                     data = r.json().get('data', {})
@@ -871,62 +968,46 @@ class GoldScraper:
                         break
 
                     for p in pl:
-                        title = p.get('title', '')
-                        if not title or not is_real_gold_product(title):
-                            continue
-                        if 'silver' in title.lower():
-                            continue
-
-                        purity, weight = self.extract_purity_and_weight(title)
-                        if not purity or not weight or weight < 0.3:
-                            continue
-
-                        raw_price = float(p.get('converted_special_price', 0) or 0)
-                        if raw_price <= 0:
-                            continue
-                        selling_price = raw_price / 100.0 if raw_price > 100000 else raw_price
-                        if selling_price < 1000:
-                            continue
-
-                        product_type = self.determine_product_type(title)
-                        is_jewellery = (product_type == 'jewellery')
-
-                        expected_price_info = self.price_calculator.calculate_expected_price(weight, purity, is_jewellery)
-                        expected_price = expected_price_info['total_expected']
-                        discount_percent = self.price_calculator.calculate_discount_percentage(selling_price, expected_price)
-                        price_per_gram = selling_price / weight
-
-                        slug = p.get('slug', '')
-                        landing_url = f"https://www.bhimagold.com/product/{slug}" if slug else "https://www.bhimagold.com"
-                        img_url = p.get('image', '')
-
-                        term_products.append({
-                            'source': 'Bhima Gold',
-                            'title': title,
-                            'weight_grams': weight,
-                            'purity': purity,
-                            'product_type': product_type,
-                            'is_jewellery': is_jewellery,
-                            'selling_price': selling_price,
-                            'original_price': selling_price,
-                            'expected_price': round(expected_price, 2),
-                            'discount_percent': discount_percent,
-                            'price_per_gram': round(price_per_gram, 2),
-                            'url': landing_url,
-                            'image_url': img_url,
-                            'brand': 'Bhima Gold',
-                            'spot_price': expected_price_info['spot_price_per_gram'],
-                            'making_charges_percent': expected_price_info['making_charges_percent'],
-                            'gst_percent': expected_price_info['gst_percent'],
-                            'timestamp': datetime.now().isoformat()
-                        })
+                        item = process_product(p)
+                        if item:
+                            term_products.append(item)
+                    page += 1
                 except Exception as e:
                     print(f"Bhima Gold error term {term} page {page}: {e}")
                     break
             return term_products
 
-        with ThreadPoolExecutor(max_workers=5) as ex:
+        def fetch_slug_page(page: int):
+            slug_products = []
+            url = f'https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&metal=Gold&country=En-in&urlSlug=gold&pageNumber={page}'
+            try:
+                r = requests.get(url, headers=headers, timeout=8)
+                if r.status_code != 200:
+                    return []
+                data = r.json().get('data', {})
+                pl = data.get('productList', [])
+                for p in pl:
+                    item = process_product(p)
+                    if item:
+                        slug_products.append(item)
+            except Exception:
+                pass
+            return slug_products
+
+        # Dynamically determine total pages for urlSlug=gold category
+        total_pages = 165
+        try:
+            r1 = requests.get('https://prod-apis.bhimagold.com/api/app/product/products?stateStock=INSTOCK&metal=Gold&country=En-in&urlSlug=gold&pageNumber=1', headers=headers, timeout=8)
+            if r1.status_code == 200:
+                count = r1.json().get('data', {}).get('count', 0)
+                if count > 0:
+                    total_pages = (count + 17) // 18
+        except Exception as e:
+            print(f"Bhima Gold error fetching page count: {e}")
+
+        with ThreadPoolExecutor(max_workers=15) as ex:
             futures = [ex.submit(fetch_term, term) for term in search_terms]
+            futures.extend([ex.submit(fetch_slug_page, p) for p in range(1, total_pages + 1)])
             for f in as_completed(futures):
                 for item in f.result():
                     if item['url'] not in unique_map:
