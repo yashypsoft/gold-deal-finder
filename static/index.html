@@ -200,6 +200,57 @@
 
                 <!-- Product Deck View -->
                 <div v-if="activeTab === 'products'">
+                    <!-- Multi-Karat Spot Matrix & Indian Units -->
+                    <div class="multi-karat-section">
+                        <div class="matrix-top-bar">
+                            <div class="matrix-title">
+                                <i class="fa-solid fa-coins"></i>
+                                <span>Live Landed Spot Benchmarks ({{ multiKaratMatrix.unitLabel }})</span>
+                            </div>
+                            <div class="segmented-group">
+                                <button class="seg-btn" :class="{ active: matrixUnit === '1g' }" @click="matrixUnit = '1g'">1g</button>
+                                <button class="seg-btn" :class="{ active: matrixUnit === '8g' }" @click="matrixUnit = '8g'">8g Pavan</button>
+                                <button class="seg-btn" :class="{ active: matrixUnit === '10g' }" @click="matrixUnit = '10g'">10g</button>
+                                <button class="seg-btn" :class="{ active: matrixUnit === 'tola' }" @click="matrixUnit = 'tola'">Tola (11.66g)</button>
+                                <button class="seg-btn" :class="{ active: matrixUnit === '100g' }" @click="matrixUnit = '100g'">100g Bar</button>
+                            </div>
+                        </div>
+                        <div class="matrix-cards-grid">
+                            <div class="matrix-card featured">
+                                <div class="matrix-card-header">
+                                    <span class="matrix-karat">24 Karat</span>
+                                    <span class="matrix-hallmark">999 Pure</span>
+                                </div>
+                                <div class="matrix-rate">{{ formatCurrency(multiKaratMatrix['24k']) }}</div>
+                                <span class="matrix-unit-tag">{{ multiKaratMatrix.unitLabel }} Investment Grade</span>
+                            </div>
+                            <div class="matrix-card featured">
+                                <div class="matrix-card-header">
+                                    <span class="matrix-karat">22 Karat</span>
+                                    <span class="matrix-hallmark">916 BIS</span>
+                                </div>
+                                <div class="matrix-rate">{{ formatCurrency(multiKaratMatrix['22k']) }}</div>
+                                <span class="matrix-unit-tag">{{ multiKaratMatrix.unitLabel }} Jewelry Benchmark</span>
+                            </div>
+                            <div class="matrix-card">
+                                <div class="matrix-card-header">
+                                    <span class="matrix-karat">18 Karat</span>
+                                    <span class="matrix-hallmark">750 Hallmark</span>
+                                </div>
+                                <div class="matrix-rate">{{ formatCurrency(multiKaratMatrix['18k']) }}</div>
+                                <span class="matrix-unit-tag">{{ multiKaratMatrix.unitLabel }} Diamond Grade</span>
+                            </div>
+                            <div class="matrix-card">
+                                <div class="matrix-card-header">
+                                    <span class="matrix-karat">9 Karat</span>
+                                    <span class="matrix-hallmark">375 Hallmark</span>
+                                </div>
+                                <div class="matrix-rate">{{ formatCurrency(multiKaratMatrix['9k']) }}</div>
+                                <span class="matrix-unit-tag">{{ multiKaratMatrix.unitLabel }} Fashion Gold</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Dealer Rates Banner Strip (Sorted Low to High Price) -->
                     <div class="dealer-rates-container" v-if="dealerRates && sortedDealerRates && sortedDealerRates.length">
                         <div v-for="card in sortedDealerRates" :key="card.key" class="rate-banner-card" :class="card.card_class">
@@ -475,10 +526,104 @@
                 <!-- Market Insights View -->
                 <div v-if="activeTab === 'insights'">
                     <div style="margin-bottom: 1.25rem;">
-                        <h2 class="serif-heading" style="font-size: 1.5rem;">Market Analytics & Trends</h2>
-                        <p style="color: var(--text-secondary); font-size: 0.85rem;">Visual breakdown of gold deal discounts, vendor pricing, and historical spot rates.</p>
+                        <h2 class="serif-heading" style="font-size: 1.5rem;">Market Analytics, Signals & Trends</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem;">Technical valuation indicators, Gold-to-Silver ratio, Shubh Muhurat calendar, and scan discount metrics.</p>
                     </div>
 
+                    <!-- 1. Gold-to-Silver Ratio (GSR) Valuation Meter -->
+                    <div class="gsr-section">
+                        <div class="matrix-top-bar" style="margin-bottom: 0.75rem;">
+                            <div class="matrix-title">
+                                <i class="fa-solid fa-scale-balanced"></i>
+                                <span>Gold-to-Silver Ratio (GSR) Technical Valuation Meter</span>
+                            </div>
+                            <span class="brand-badge" :style="{ background: gsrInsight.zone === 'silver' ? 'rgba(99, 102, 241, 0.15)' : (gsrInsight.zone === 'gold' ? 'rgba(197, 160, 89, 0.15)' : 'rgba(21, 128, 61, 0.15)'), color: gsrInsight.zone === 'silver' ? '#6366f1' : (gsrInsight.zone === 'gold' ? 'var(--gold)' : 'var(--success)') }">
+                                {{ gsrInsight.badge }}
+                            </span>
+                        </div>
+
+                        <div class="gsr-grid">
+                            <div class="gsr-main-stat">
+                                <span class="gsr-ratio-badge">Live Market Ratio</span>
+                                <div class="gsr-ratio-value">{{ gsrRatio }} <span>: 1</span></div>
+                                <span class="gsr-ratio-sub">1g 24K Gold buys {{ gsrRatio }}g 999 Silver</span>
+                            </div>
+
+                            <div class="gsr-meter-container">
+                                <div class="gsr-meter-bar">
+                                    <div class="gsr-zone gold-favored">Gold Cheap (&lt;65)</div>
+                                    <div class="gsr-zone fair-zone">Fair Equilibrium (65-80)</div>
+                                    <div class="gsr-zone silver-favored">Silver Cheap (&gt;80)</div>
+                                    <div class="gsr-pointer" :style="{ left: gsrPointerPosition + '%' }"></div>
+                                </div>
+                                <div class="gsr-scale-labels">
+                                    <span>50 (Gold Favored)</span>
+                                    <span>65</span>
+                                    <span>80</span>
+                                    <span>100+ (Silver Favored)</span>
+                                </div>
+
+                                <div class="gsr-insight-card">
+                                    <i class="fa-solid fa-lightbulb"></i>
+                                    <div>
+                                        <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.15rem;">{{ gsrInsight.title }}</div>
+                                        <div>{{ gsrInsight.desc }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Auspicious Gold Buying Calendar (Shubh Muhurat) -->
+                    <div class="muhurat-section">
+                        <div class="matrix-top-bar" style="margin-bottom: 0.75rem;">
+                            <div class="matrix-title">
+                                <i class="fa-solid fa-om"></i>
+                                <span>Auspicious Gold Buying Calendar (Shubh Muhurat 2026–2027)</span>
+                            </div>
+                        </div>
+
+                        <div class="muhurat-featured-box" v-if="nextMuhurat">
+                            <div>
+                                <span class="muhurat-badge-chip"><i class="fa-solid fa-sparkles"></i> {{ nextMuhurat.badge }}</span>
+                                <h3 class="muhurat-name">{{ nextMuhurat.name }}</h3>
+                                <p class="muhurat-date-text">
+                                    <strong>{{ nextMuhurat.displayDate }}</strong> · {{ nextMuhurat.occasion }} · {{ nextMuhurat.auspiciousTime }}
+                                </p>
+                            </div>
+                            <div class="muhurat-countdown-pill">
+                                <i class="fa-regular fa-clock"></i>
+                                <span>{{ nextMuhuratCountdownFormatted }}</span>
+                            </div>
+                        </div>
+
+                        <button class="muhurat-toggle-btn" @click="muhuratDrawerOpen = !muhuratDrawerOpen">
+                            <span><i class="fa-regular fa-calendar-days" style="margin-right: 0.5rem; color: var(--gold);"></i> View Complete 2026–2027 Shubh Muhurat Calendar</span>
+                            <i class="fa-solid" :class="muhuratDrawerOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                        </button>
+
+                        <div class="muhurat-drawer" v-if="muhuratDrawerOpen">
+                            <div class="segmented-group" style="width: fit-content;">
+                                <button class="seg-btn" :class="{ active: muhuratFilter === 'upcoming' }" @click="muhuratFilter = 'upcoming'">Upcoming Dates</button>
+                                <button class="seg-btn" :class="{ active: muhuratFilter === 'passed' }" @click="muhuratFilter = 'passed'">Past Dates</button>
+                                <button class="seg-btn" :class="{ active: muhuratFilter === 'all' }" @click="muhuratFilter = 'all'">All Dates</button>
+                            </div>
+
+                            <div class="muhurat-grid">
+                                <div class="muhurat-card" :class="{ next: item.name === nextMuhurat.name }" v-for="item in filteredMuhurats" :key="item.name">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span class="brand-badge" style="font-size: 0.65rem;">{{ item.badge }}</span>
+                                        <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-primary);">{{ item.displayDate }}</span>
+                                    </div>
+                                    <h4 class="muhurat-card-title">{{ item.name }}</h4>
+                                    <p class="muhurat-card-sub">{{ item.significance }}</p>
+                                    <div class="muhurat-card-time"><i class="fa-regular fa-clock"></i> {{ item.auspiciousTime }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Charts Grid -->
                     <div class="insights-grid">
                         <div class="chart-card">
                             <div class="chart-card-title">Vendor Product Distribution</div>
@@ -1137,9 +1282,20 @@
                 <span class="mobile-nav-badge highlight" v-if="activeFilterCount">{{ activeFilterCount }}</span>
             </button>
         </div>
+
+        <!-- Sticky 1-Click WhatsApp Share Floating Widget -->
+        <div class="sticky-wa-float">
+            <button class="btn-wa-action" @click="shareOnWhatsApp" title="Share live rates & top deals on WhatsApp">
+                <i class="fa-brands fa-whatsapp" style="font-size: 1.1rem;"></i>
+                <span>Share Daily Rates</span>
+            </button>
+            <button class="btn-wa-copy" @click="copyWhatsAppBriefing" title="Copy daily rate briefing text">
+                <i class="fa-solid fa-copy"></i>
+            </button>
+        </div>
     </div>
 
     <!-- Application JavaScript logic -->
-    <script src="/static/app.js?v=20260827_1"></script>
+    <script src="/static/app.js?v=20260827_2"></script>
 </body>
 </html>

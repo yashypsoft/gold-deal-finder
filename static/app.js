@@ -73,6 +73,86 @@
                 cagr: 10,
             },
 
+            // Market Signals & Cultural Tools State
+            matrixUnit: '1g',
+            muhuratDrawerOpen: false,
+            muhuratFilter: 'upcoming',
+            countdownNow: Date.now(),
+            auspiciousDates: [
+                {
+                    name: 'Dhanteras (Diwali)',
+                    date: '2026-11-06T18:14:00+05:30',
+                    displayDate: '06 November 2026',
+                    occasion: 'Prime Gold Buying Festival',
+                    significance: 'Wealth & Prosperity',
+                    auspiciousTime: '06:14 PM to 08:20 PM',
+                    badge: 'FESTIVAL OF WEALTH'
+                },
+                {
+                    name: 'Diwali (Lakshmi Puja)',
+                    date: '2026-11-08T17:30:00+05:30',
+                    displayDate: '08 November 2026',
+                    occasion: 'Diwali Mahurat',
+                    significance: 'Annual Family Jewelry Purchases',
+                    auspiciousTime: '05:30 PM to 07:25 PM',
+                    badge: 'MAHA LAKSHMI'
+                },
+                {
+                    name: 'Guru Pushya Yoga (Nov)',
+                    date: '2026-11-19T06:00:00+05:30',
+                    displayDate: '19 November 2026',
+                    occasion: 'Guru Pushya Nakshatra',
+                    significance: 'Most Auspicious Nakshatra for Gold & Bullion',
+                    auspiciousTime: 'Full Day Auspicious Tithi',
+                    badge: 'HIGHLY AUSPICIOUS'
+                },
+                {
+                    name: 'Pushya Nakshatra (Dec)',
+                    date: '2026-12-16T07:05:00+05:30',
+                    displayDate: '16 December 2026',
+                    occasion: 'Pushya Nakshatra',
+                    significance: 'Traditional Bullion Investment Day',
+                    auspiciousTime: '07:05 AM to 03:40 PM',
+                    badge: 'NAKSHATRA'
+                },
+                {
+                    name: 'Makar Sankranti / Pongal',
+                    date: '2027-01-14T08:30:00+05:30',
+                    displayDate: '14 January 2027',
+                    occasion: 'Harvest Festival',
+                    significance: 'Auspicious Start for New Gold Investments',
+                    auspiciousTime: '08:30 AM to 12:15 PM',
+                    badge: 'FESTIVAL'
+                },
+                {
+                    name: 'Vasant Panchami',
+                    date: '2027-02-11T07:10:00+05:30',
+                    displayDate: '11 February 2027',
+                    occasion: 'Saraswati Puja',
+                    significance: 'Shubh Muhurat for Gold Ornaments',
+                    auspiciousTime: '07:10 AM to 12:35 PM',
+                    badge: 'SHUBH MUHURAT'
+                },
+                {
+                    name: 'Ugadi / Gudi Padwa',
+                    date: '2027-04-07T06:05:00+05:30',
+                    displayDate: '07 April 2027',
+                    occasion: 'New Year Day',
+                    significance: 'New Beginnings & Gold Coin Purchases',
+                    auspiciousTime: '06:05 AM to 10:45 AM',
+                    badge: 'NEW YEAR'
+                },
+                {
+                    name: 'Akshaya Tritiya',
+                    date: '2027-05-09T05:40:00+05:30',
+                    displayDate: '09 May 2027',
+                    occasion: 'Akshaya Tritiya (Akha Teej)',
+                    significance: 'Highest Gold Buying Day in India (Eternal Wealth)',
+                    auspiciousTime: '05:40 AM to 12:20 PM',
+                    badge: 'GRAND MUHURAT'
+                }
+            ],
+
             loading: true,
             loadingProducts: false,
             refreshing: false,
@@ -252,6 +332,93 @@
 
             liveSpotPrice() {
                 return numeric(this.spotPrice?.gold?.per_gram?.['999_landed'], 8800);
+            },
+
+            liveSilverPrice() {
+                return numeric(this.spotPrice?.silver?.per_gram, 98);
+            },
+
+            gsrRatio() {
+                if (!this.liveSilverPrice || this.liveSilverPrice <= 0) return 88.5;
+                return Math.round((this.liveSpotPrice / this.liveSilverPrice) * 10) / 10;
+            },
+
+            gsrPointerPosition() {
+                // Scale from ratio 50 to 100
+                const percent = ((this.gsrRatio - 50) / 50) * 100;
+                return Math.max(5, Math.min(95, Math.round(percent)));
+            },
+
+            gsrInsight() {
+                const ratio = this.gsrRatio;
+                if (ratio > 80) {
+                    return {
+                        zone: 'silver',
+                        badge: 'SILVER FAVORED',
+                        title: 'Silver is Historically Undervalued',
+                        desc: `At ${ratio}:1, 1 gram of 24K gold buys ${ratio} grams of silver. Historical mean is ~65:1. Current ratio indicates silver offers strong relative upside.`
+                    };
+                } else if (ratio < 65) {
+                    return {
+                        zone: 'gold',
+                        badge: 'GOLD FAVORED',
+                        title: 'Gold is Historically Undervalued',
+                        desc: `At ${ratio}:1, gold purchasing power is high relative to silver. Gold offers stronger relative stability.`
+                    };
+                }
+                return {
+                    zone: 'fair',
+                    badge: 'FAIR BALANCE',
+                    title: 'Fair Valuation Equilibrium',
+                    desc: `At ${ratio}:1, gold and silver are trading within normal historical valuation parity (65 to 80 range).`
+                };
+            },
+
+            multiKaratMatrix() {
+                const unitMultipliers = {
+                    '1g': { label: '1 Gram', mult: 1 },
+                    '8g': { label: '8 Grams (Pavan)', mult: 8 },
+                    '10g': { label: '10 Grams', mult: 10 },
+                    'tola': { label: '1 Tola (11.66g)', mult: 11.6638 },
+                    '100g': { label: '100 Grams Bar', mult: 100 }
+                };
+
+                const currentMult = unitMultipliers[this.matrixUnit]?.mult || 1;
+                const rates = this.karatRates;
+
+                return {
+                    unitLabel: unitMultipliers[this.matrixUnit]?.label || '1 Gram',
+                    '24k': Math.round(rates['24'] * currentMult),
+                    '22k': Math.round(rates['22'] * currentMult),
+                    '18k': Math.round(rates['18'] * currentMult),
+                    '9k': Math.round(rates['9'] * currentMult),
+                };
+            },
+
+            nextMuhurat() {
+                const now = this.countdownNow;
+                return this.auspiciousDates.find((item) => new Date(item.date).getTime() > now) || this.auspiciousDates[0];
+            },
+
+            nextMuhuratCountdownFormatted() {
+                if (!this.nextMuhurat) return 'Upcoming';
+                const diff = new Date(this.nextMuhurat.date).getTime() - this.countdownNow;
+                if (diff <= 0) return 'Auspicious Muhurat Live Today!';
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const secs = Math.floor((diff % (1000 * 60)) / 1000);
+                return `${days}d ${hours}h ${mins}m ${secs}s left`;
+            },
+
+            filteredMuhurats() {
+                const now = this.countdownNow;
+                if (this.muhuratFilter === 'upcoming') {
+                    return this.auspiciousDates.filter((item) => new Date(item.date).getTime() >= now);
+                } else if (this.muhuratFilter === 'passed') {
+                    return this.auspiciousDates.filter((item) => new Date(item.date).getTime() < now);
+                }
+                return this.auspiciousDates;
             },
 
             karatRates() {
@@ -613,15 +780,63 @@
             this.initKeyboardShortcuts();
             this.boot();
             this.setupAutoRefresh();
+            this.countdownInterval = setInterval(() => {
+                this.countdownNow = Date.now();
+            }, 1000);
         },
 
         beforeDestroy() {
             window.removeEventListener('keydown', this.handleKeyDown);
             window.removeEventListener('resize', this.handleResize);
             this.destroyCharts();
+            if (this.countdownInterval) {
+                clearInterval(this.countdownInterval);
+            }
         },
 
         methods: {
+            getWhatsAppShareText() {
+                const spot24 = this.formatCurrency(this.liveSpotPrice);
+                const spot22 = this.formatCurrency(this.karatRates['22']);
+                const spot18 = this.formatCurrency(this.karatRates['18']);
+                const silver = this.formatCurrency(this.liveSilverPrice);
+                const gsr = this.gsrRatio;
+                const best = this.bestCurrentDeal;
+
+                let msg = `🪙 *GOLD DEAL FINDER — DAILY LIVE BRIEFING*\n\n`;
+                msg += `📊 *Live Benchmark Rates:*\n`;
+                msg += `• 24K (999 Pure): ${spot24}/g (₹${Math.round(this.liveSpotPrice * 10).toLocaleString('en-IN')}/10g)\n`;
+                msg += `• 22K (916 Hallmark): ${spot22}/g (₹${Math.round(this.karatRates['22'] * 8).toLocaleString('en-IN')}/8g Pavan)\n`;
+                msg += `• 18K (750): ${spot18}/g\n`;
+                msg += `• Silver (999): ${silver}/g\n\n`;
+                msg += `⚖️ *Gold-to-Silver Ratio:* ${gsr}:1 (${this.gsrInsight.badge})\n`;
+
+                if (best) {
+                    const savings = Math.max(0, numeric(best.expected_price) - numeric(best.selling_price));
+                    msg += `\n🔥 *Top Deal Today:*\n`;
+                    msg += `• ${best.title}\n`;
+                    msg += `• Vendor: ${best.source} | Purity: ${best.purity} | ${best.weight_grams}g\n`;
+                    msg += `• Price: ${this.formatCurrency(best.selling_price)} (Save ${this.formatCurrency(savings)} / ${this.formatPercent(best.discount_percent)})\n`;
+                    msg += `• Link: ${best.url}\n`;
+                }
+
+                if (this.nextMuhurat) {
+                    msg += `\n✨ *Next Shubh Muhurat:* ${this.nextMuhurat.name} (${this.nextMuhurat.displayDate})\n`;
+                }
+
+                msg += `\nCheck live market deals on Gold Deal Finder.`;
+                return msg;
+            },
+
+            shareOnWhatsApp() {
+                const text = encodeURIComponent(this.getWhatsAppShareText());
+                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+            },
+
+            copyWhatsAppBriefing() {
+                this.copyToClipboard(this.getWhatsAppShareText(), 'Daily Gold Deal Briefing copied to clipboard!');
+            },
+
             onSortByChange() {
                 if (this.sortBy === 'selling_price' || this.sortBy === 'price_per_gram') {
                     this.sortOrder = 'asc';

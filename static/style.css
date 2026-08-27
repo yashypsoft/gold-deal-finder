@@ -1957,4 +1957,454 @@ html, body {
   border-color: var(--gold-border);
 }
 
+/* ==========================================================================
+   MULTI-KARAT LIVE SPOT MATRIX & INDIAN UNITS
+   ========================================================================== */
+
+.multi-karat-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.matrix-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.matrix-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.matrix-title i {
+  color: var(--gold);
+}
+
+.matrix-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.matrix-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  position: relative;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.matrix-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-border);
+}
+
+.matrix-card.featured {
+  border-color: var(--gold-border);
+  background: linear-gradient(180deg, var(--gold-light), var(--bg-subtle));
+}
+
+.matrix-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.matrix-karat {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.matrix-hallmark {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--gold);
+  background: var(--surface);
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.matrix-rate {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.matrix-unit-tag {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   GOLD-TO-SILVER RATIO (GSR) VALUATION METER
+   ========================================================================== */
+
+.gsr-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.gsr-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (max-width: 850px) {
+  .gsr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gsr-main-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-right: 1.25rem;
+  border-right: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 850px) {
+  .gsr-main-stat {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-right: 0;
+    padding-bottom: 1rem;
+  }
+}
+
+.gsr-ratio-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.gsr-ratio-value {
+  font-size: 2.1rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.gsr-ratio-value span {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.gsr-ratio-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.gsr-meter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gsr-meter-bar {
+  position: relative;
+  height: 22px;
+  background: var(--bg-subtle);
+  border-radius: 20px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.gsr-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.gsr-zone.gold-favored {
+  background: rgba(197, 160, 89, 0.2);
+  color: var(--gold);
+}
+
+.gsr-zone.fair-zone {
+  background: rgba(21, 128, 61, 0.15);
+  color: var(--success);
+}
+
+.gsr-zone.silver-favored {
+  background: rgba(99, 102, 241, 0.18);
+  color: #6366f1;
+}
+
+.gsr-pointer {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 5px;
+  background: var(--text-primary);
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.4);
+  transform: translateX(-50%);
+  transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
+}
+
+.gsr-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.gsr-insight-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.8rem;
+}
+
+.gsr-insight-card i {
+  color: var(--gold);
+  font-size: 1rem;
+  margin-top: 0.1rem;
+}
+
+/* ==========================================================================
+   AUSPICIOUS GOLD BUYING CALENDAR (SHUBH MUHURAT)
+   ========================================================================== */
+
+.muhurat-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.muhurat-featured-box {
+  background: linear-gradient(135deg, var(--surface), var(--gold-light));
+  border: 1px solid var(--gold-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.muhurat-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--gold);
+  background: var(--surface);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold-border);
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.muhurat-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.muhurat-date-text {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.muhurat-countdown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--gold-border);
+  padding: 0.5rem 1rem;
+  border-radius: 30px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gold);
+  box-shadow: var(--shadow-xs);
+}
+
+.muhurat-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.muhurat-toggle-btn:hover {
+  background: var(--surface-hover);
+}
+
+.muhurat-drawer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.muhurat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.muhurat-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.muhurat-card.next {
+  border-color: var(--gold-border);
+  background: var(--gold-light);
+}
+
+.muhurat-card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.muhurat-card-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.muhurat-card-time {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gold);
+  margin-top: 0.25rem;
+}
+
+/* ==========================================================================
+   STICKY 1-CLICK WHATSAPP SHARE WIDGET
+   ========================================================================== */
+
+.sticky-wa-float {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .sticky-wa-float {
+    bottom: 70px;
+    right: 15px;
+  }
+}
+
+.btn-wa-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #25d366;
+  color: #ffffff;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: 30px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.4);
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-wa-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.6);
+  color: #ffffff;
+}
+
+.btn-wa-copy {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.btn-wa-copy:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+
 
