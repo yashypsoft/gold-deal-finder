@@ -443,6 +443,9 @@
                                     <button class="btn-shortlist-icon" :class="{ 'active': isFavorite(product) }" @click="toggleFavorite(product)" title="Shortlist product">
                                         <i class="fa-solid" :class="isFavorite(product) ? 'fa-star' : 'fa-star-of-life'"></i>
                                     </button>
+                                    <button class="btn-shortlist-icon" style="color: #25d366;" @click="shareProductOnWhatsApp(product)" title="Share this deal on WhatsApp">
+                                        <i class="fa-brands fa-whatsapp"></i>
+                                    </button>
                                     <a :href="product.url" target="_blank" rel="noopener" class="btn-view-deal">
                                         <span>View Deal</span>
                                         <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.7rem;"></i>

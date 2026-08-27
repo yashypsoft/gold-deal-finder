@@ -573,7 +573,17 @@
 
             bestCurrentDeal() {
                 if (!this.allProducts.length) return null;
-                return [...this.allProducts].sort((a, b) => numeric(b.discount_percent) - numeric(a.discount_percent))[0];
+                const valid = this.allProducts.filter((p) => {
+                    const ppg = numeric(p.price_per_gram);
+                    const disc = numeric(p.discount_percent);
+                    const wt = numeric(p.weight_grams);
+                    const title = (p.title || '').toLowerCase();
+                    const isOutOfStock = p.in_stock === false || p.stock_status === 'OUT_OF_STOCK' || p.is_available === false || title.includes('out of stock') || title.includes('sold out');
+                    // Real gold listing criteria: valid stock, >0.3g weight, realistic gold price per gram (>= ₹3000/g) and sane discount (<40%)
+                    return !isOutOfStock && ppg >= 3000 && wt >= 0.3 && disc < 40;
+                });
+                if (!valid.length) return null;
+                return [...valid].sort((a, b) => numeric(b.discount_percent) - numeric(a.discount_percent))[0];
             },
 
             favoriteProducts() {
@@ -835,6 +845,36 @@
 
             copyWhatsAppBriefing() {
                 this.copyToClipboard(this.getWhatsAppShareText(), 'Daily Gold Deal Briefing copied to clipboard!');
+            },
+
+            getProductShareText(product) {
+                if (!product) return this.getWhatsAppShareText();
+                const savings = Math.max(0, numeric(product.expected_price) - numeric(product.selling_price));
+                const ppg = this.formatCurrency(numeric(product.price_per_gram));
+                const price = this.formatCurrency(numeric(product.selling_price));
+                const exp = this.formatCurrency(numeric(product.expected_price));
+                const disc = this.formatPercent(product.discount_percent);
+
+                let msg = `🪙 *GOLD DEAL ALERT — ${product.source}*\n\n`;
+                msg += `✨ *${product.title}*\n`;
+                msg += `• Purity: ${product.purity || '24K'} | Weight: ${product.weight_grams}g\n`;
+                msg += `• Deal Price: *${price}* (Effective ${ppg}/g)\n`;
+                msg += `• Benchmark Value: ${exp}\n`;
+                if (savings > 0) {
+                    msg += `• 🔥 *You Save: ${this.formatCurrency(savings)} (${disc})*\n`;
+                }
+                msg += `\n🛒 *Buy Now:* ${product.url}\n`;
+                msg += `\nLive rates: 24K @ ${this.formatCurrency(this.liveSpotPrice)}/g | GSR @ ${this.gsrRatio}:1`;
+                return msg;
+            },
+
+            shareProductOnWhatsApp(product) {
+                const text = encodeURIComponent(this.getProductShareText(product));
+                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+            },
+
+            copyProductWhatsApp(product) {
+                this.copyToClipboard(this.getProductShareText(product), 'Product deal briefing copied!');
             },
 
             onSortByChange() {
