@@ -95,10 +95,15 @@
                         <span class="nav-badge">{{ scans.length }}</span>
                     </a>
 
-                    <div class="nav-section-label">Analytics</div>
+                    <div class="nav-section-label">Analytics & Tools</div>
                     <a class="nav-item" :class="{ 'active': activeTab === 'insights' }" @click.preventDefault="switchTab('insights')">
                         <i class="fa-solid fa-chart-line"></i>
                         <span>Market Insights</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'calculators' }" @click.preventDefault="switchTab('calculators')">
+                        <i class="fa-solid fa-calculator"></i>
+                        <span>Tools & Calculators</span>
+                        <span class="nav-badge" style="background: var(--gold); color: #fff;">5</span>
                     </a>
                     <a class="nav-item" :class="{ 'active': activeTab === 'shortlist' }" @click.preventDefault="switchTab('shortlist')">
                         <i class="fa-solid fa-star"></i>
@@ -371,6 +376,18 @@
                                     </div>
                                 </div>
 
+                                <!-- Pure Gold Melt vs Making Charge Breakdown Strip -->
+                                <div class="card-melt-strip">
+                                    <div class="card-melt-info">
+                                        <span class="card-melt-label">Pure Melt Value</span>
+                                        <span class="card-melt-val">{{ formatCurrency(getMeltBreakdown(product).meltValue) }} ({{ getMeltBreakdown(product).karat }}K)</span>
+                                    </div>
+                                    <button class="btn-calc-pill" @click="openProductInCalculator(product)" title="Deconstruct making charges in Jewelry Bill Calculator">
+                                        <i class="fa-solid fa-calculator"></i>
+                                        <span>Making: {{ getMeltBreakdown(product).makingPercent }}%</span>
+                                    </button>
+                                </div>
+
                                 <div class="card-footer-actions">
                                     <button class="btn-shortlist-icon" :class="{ 'active': isFavorite(product) }" @click="toggleFavorite(product)" title="Shortlist product">
                                         <i class="fa-solid" :class="isFavorite(product) ? 'fa-star' : 'fa-star-of-life'"></i>
@@ -539,6 +556,451 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Interactive Investment & Calculation Suite View -->
+                <div v-if="activeTab === 'calculators'" class="calc-suite-container">
+                    <div style="margin-bottom: 0.5rem;">
+                        <h2 class="serif-heading" style="font-size: 1.5rem;">Gold Financial Tools & Calculators</h2>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem;">Live landed gold rate benchmarks, jewelry billing breakdown, buying power, and SIP wealth accumulation.</p>
+                    </div>
+
+                    <!-- Calculator Navigation Tabs -->
+                    <div class="calc-nav-tabs">
+                        <button class="calc-tab-btn" :class="{ 'active': activeCalcTab === 'bill' }" @click="setCalcTab('bill')">
+                            <i class="fa-solid fa-receipt"></i>
+                            <span>Jewelry Bill Breakdown</span>
+                        </button>
+                        <button class="calc-tab-btn" :class="{ 'active': activeCalcTab === 'budget' }" @click="setCalcTab('budget')">
+                            <i class="fa-solid fa-coins"></i>
+                            <span>Budget to Gold (₹→g)</span>
+                        </button>
+                        <button class="calc-tab-btn" :class="{ 'active': activeCalcTab === 'worth' }" @click="setCalcTab('worth')">
+                            <i class="fa-solid fa-scale-balanced"></i>
+                            <span>Gold Worth & Returns</span>
+                        </button>
+                        <button class="calc-tab-btn" :class="{ 'active': activeCalcTab === 'sip' }" @click="setCalcTab('sip')">
+                            <i class="fa-solid fa-piggy-bank"></i>
+                            <span>Monthly Gold SIP</span>
+                        </button>
+                        <button class="calc-tab-btn" :class="{ 'active': activeCalcTab === 'goal' }" @click="setCalcTab('goal')">
+                            <i class="fa-solid fa-bullseye"></i>
+                            <span>Target Goal Planner</span>
+                        </button>
+                    </div>
+
+                    <!-- 1. JEWELRY BILL & MAKING CHARGES CALCULATOR -->
+                    <div class="calc-main-card" v-if="activeCalcTab === 'bill'">
+                        <div class="calc-form-pane">
+                            <div class="calc-form-header">
+                                <div>
+                                    <div class="calc-form-title"><i class="fa-solid fa-receipt"></i> Jewelry Bill Calculator</div>
+                                    <div class="calc-form-desc">Compute exact jewelry cost including raw gold value, making charges, discounts & GST.</div>
+                                </div>
+                                <div class="segmented-group" style="padding: 0.15rem;">
+                                    <button class="seg-btn" :class="{ 'active': calcBill.includeGst }" @click="calcBill.includeGst = true">3% GST</button>
+                                    <button class="seg-btn" :class="{ 'active': !calcBill.includeGst }" @click="calcBill.includeGst = false">No GST</button>
+                                </div>
+                            </div>
+
+                            <div class="calc-fields-grid">
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Weight Quantity</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0.1" step="0.1" v-model.number="calcBill.weight">
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Weight Unit</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcBill.unit === 'gram' }" @click="calcBill.unit = 'gram'">Grams</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.unit === 'pavan' }" @click="calcBill.unit = 'pavan'">8g Pavan</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.unit === 'tola' }" @click="calcBill.unit = 'tola'">Tola</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">
+                                        <span>Gold Purity / Karat</span>
+                                        <span class="calc-label-badge">{{ formatCurrency(billResult.ratePerGram) }}/g</span>
+                                    </label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcBill.karat === '24' }" @click="calcBill.karat = '24'">24K (999)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.karat === '22' }" @click="calcBill.karat = '22'">22K (916)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.karat === '18' }" @click="calcBill.karat = '18'">18K (750)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.karat === '14' }" @click="calcBill.karat = '14'">14K (585)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBill.karat === '9' }" @click="calcBill.karat = '9'">9K (375)</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Making Charges (%)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0" max="50" step="0.5" v-model.number="calcBill.makingPercent">
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Store Discount (₹/g off)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0" step="50" placeholder="e.g. 100" v-model.number="calcBill.discountPerGram">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Output Pane -->
+                        <div class="calc-output-pane">
+                            <div class="calc-output-header">
+                                <span>Bill Breakdown</span>
+                                <span>{{ billResult.weightGrams }}g @ {{ calcBill.karat }}K</span>
+                            </div>
+
+                            <div class="calc-breakdown-list">
+                                <div class="breakdown-row">
+                                    <span>Raw Gold Value</span>
+                                    <strong>{{ formatCurrency(billResult.goldValue) }}</strong>
+                                </div>
+                                <div class="breakdown-row discount-row" v-if="billResult.discount > 0">
+                                    <span>Store Discount</span>
+                                    <strong>-{{ formatCurrency(billResult.discount) }}</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>Making Charges ({{ calcBill.makingPercent }}%)</span>
+                                    <strong>{{ formatCurrency(billResult.makingCharges) }}</strong>
+                                </div>
+                                <div class="breakdown-row" v-if="calcBill.includeGst">
+                                    <span>GST (3% on subtotal)</span>
+                                    <strong>{{ formatCurrency(billResult.gst) }}</strong>
+                                </div>
+                            </div>
+
+                            <div class="calc-total-banner">
+                                <span class="calc-total-label">Total Estimated Bill</span>
+                                <div class="calc-total-value">{{ formatCurrency(billResult.total) }}</div>
+                                <span class="calc-total-sub">Effective Landed Rate: {{ formatCurrency(Math.round(billResult.total / (billResult.weightGrams || 1))) }}/g</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. BUDGET TO GOLD CALCULATOR -->
+                    <div class="calc-main-card" v-if="activeCalcTab === 'budget'">
+                        <div class="calc-form-pane">
+                            <div class="calc-form-header">
+                                <div>
+                                    <div class="calc-form-title"><i class="fa-solid fa-coins"></i> How Much Gold Can You Buy?</div>
+                                    <div class="calc-form-desc">Convert your rupee budget into exact gold grams, 8g pavans, and tolas.</div>
+                                </div>
+                            </div>
+
+                            <div class="calc-fields-grid">
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">Enter Investment Budget (₹)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem; font-size: 1.1rem; font-weight: 700;" min="100" step="1000" v-model.number="calcBudget.amount">
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">
+                                        <span>Select Gold Purity</span>
+                                        <span class="calc-label-badge">{{ formatCurrency(budgetResult.ratePerGram) }}/g</span>
+                                    </label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcBudget.karat === '24' }" @click="calcBudget.karat = '24'">24K (999 Pure)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBudget.karat === '22' }" @click="calcBudget.karat = '22'">22K (916 Jewelry)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBudget.karat === '18' }" @click="calcBudget.karat = '18'">18K (750)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcBudget.karat === '9' }" @click="calcBudget.karat = '9'">9K (375)</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Output Pane -->
+                        <div class="calc-output-pane">
+                            <div class="calc-output-header">
+                                <span>Buying Power Output</span>
+                                <span>{{ formatCurrency(calcBudget.amount) }}</span>
+                            </div>
+
+                            <div class="calc-breakdown-list">
+                                <div class="breakdown-row">
+                                    <span>Benchmark Rate / g</span>
+                                    <strong>{{ formatCurrency(budgetResult.ratePerGram) }}</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>In 8g Pavans (Sovereigns)</span>
+                                    <strong>{{ budgetResult.pavans }} Pavans</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>In Tolas (11.66g)</span>
+                                    <strong>{{ budgetResult.tolas }} Tolas</strong>
+                                </div>
+                            </div>
+
+                            <div class="calc-total-banner">
+                                <span class="calc-total-label">You Get (Exact Grams)</span>
+                                <div class="calc-total-value">{{ budgetResult.grams }} <span style="font-size: 1rem; font-weight: 500;">grams</span></div>
+                                <span class="calc-total-sub">Pure {{ calcBudget.karat }}K Gold allocation</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. GOLD WORTH & PORTFOLIO VALUATION -->
+                    <div class="calc-main-card" v-if="activeCalcTab === 'worth'">
+                        <div class="calc-form-pane">
+                            <div class="calc-form-header">
+                                <div>
+                                    <div class="calc-form-title"><i class="fa-solid fa-scale-balanced"></i> What Is Your Gold Worth Today?</div>
+                                    <div class="calc-form-desc">Value physical gold coins, bars, or jewelry and evaluate investment profit/loss.</div>
+                                </div>
+                            </div>
+
+                            <div class="calc-fields-grid">
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Total Gold Weight</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0.1" step="0.5" v-model.number="calcWorth.weight">
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Unit</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.unit === 'gram' }" @click="calcWorth.unit = 'gram'">Grams</button>
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.unit === 'pavan' }" @click="calcWorth.unit = 'pavan'">8g Pavan</button>
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.unit === 'tola' }" @click="calcWorth.unit = 'tola'">Tola</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">
+                                        <span>Gold Purity</span>
+                                        <span class="calc-label-badge">{{ formatCurrency(worthResult.ratePerGram) }}/g</span>
+                                    </label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.karat === '24' }" @click="calcWorth.karat = '24'">24K (999)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.karat === '22' }" @click="calcWorth.karat = '22'">22K (916)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.karat === '18' }" @click="calcWorth.karat = '18'">18K (750)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcWorth.karat === '9' }" @click="calcWorth.karat = '9'">9K (375)</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">Purchase Price / Gram (Optional for P&L)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0" step="100" placeholder="e.g. 6000" v-model.number="calcWorth.buyPricePerGram">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Output Pane -->
+                        <div class="calc-output-pane">
+                            <div class="calc-output-header">
+                                <span>Portfolio Valuation</span>
+                                <span>{{ worthResult.weightGrams }}g @ {{ calcWorth.karat }}K</span>
+                            </div>
+
+                            <div class="calc-breakdown-list">
+                                <div class="breakdown-row">
+                                    <span>Today's Spot Rate / g</span>
+                                    <strong>{{ formatCurrency(worthResult.ratePerGram) }}</strong>
+                                </div>
+                                <div class="breakdown-row" v-if="worthResult.invested > 0">
+                                    <span>Total Capital Invested</span>
+                                    <strong>{{ formatCurrency(worthResult.invested) }}</strong>
+                                </div>
+                                <div class="breakdown-row" v-if="worthResult.invested > 0" :style="{ color: worthResult.profitLoss >= 0 ? 'var(--success)' : 'var(--danger)' }">
+                                    <span>Profit / Return</span>
+                                    <strong>{{ worthResult.profitLoss >= 0 ? '+' : '' }}{{ formatCurrency(worthResult.profitLoss) }} ({{ worthResult.returnsPercent }}%)</strong>
+                                </div>
+                            </div>
+
+                            <div class="calc-total-banner">
+                                <span class="calc-total-label">Total Current Market Worth</span>
+                                <div class="calc-total-value">{{ formatCurrency(worthResult.currentWorth) }}</div>
+                                <span class="calc-total-sub">Liquidation valuation based on live spot benchmark</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. MONTHLY GOLD SIP ACCUMULATOR -->
+                    <div class="calc-main-card" v-if="activeCalcTab === 'sip'">
+                        <div class="calc-form-pane">
+                            <div class="calc-form-header">
+                                <div>
+                                    <div class="calc-form-title"><i class="fa-solid fa-piggy-bank"></i> Monthly Gold SIP & Accumulator</div>
+                                    <div class="calc-form-desc">Model recurring monthly gold savings and project long-term wealth compounding.</div>
+                                </div>
+                            </div>
+
+                            <div class="calc-fields-grid">
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Planning Mode</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcSip.mode === 'budget' }" @click="calcSip.mode = 'budget'">Monthly ₹</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.mode === 'weight' }" @click="calcSip.mode = 'weight'">Monthly Grams</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Gold Purity</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcSip.karat === '24' }" @click="calcSip.karat = '24'">24K (Coins)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.karat === '22' }" @click="calcSip.karat = '22'">22K (Jewelry)</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width" v-if="calcSip.mode === 'budget'">
+                                    <label class="calc-label">Monthly Investment Amount (₹)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="500" step="500" v-model.number="calcSip.amount">
+                                </div>
+
+                                <div class="calc-field-group full-width" v-else>
+                                    <label class="calc-label">Monthly Gold Target (grams)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="0.1" step="0.5" v-model.number="calcSip.weight">
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">Investment Duration</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcSip.durationMonths === 6 }" @click="calcSip.durationMonths = 6">6 Months</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.durationMonths === 12 }" @click="calcSip.durationMonths = 12">1 Year</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.durationMonths === 24 }" @click="calcSip.durationMonths = 24">2 Years</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.durationMonths === 36 }" @click="calcSip.durationMonths = 36">3 Years</button>
+                                        <button class="seg-btn" :class="{ 'active': calcSip.durationMonths === 60 }" @click="calcSip.durationMonths = 60">5 Years</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">
+                                        <span>Expected Annual Return (CAGR)</span>
+                                        <span class="calc-label-badge">{{ calcSip.cagr }}% per year</span>
+                                    </label>
+                                    <div class="range-slider-wrap">
+                                        <input type="range" class="calc-range-slider" min="4" max="18" step="0.5" v-model.number="calcSip.cagr">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Output Pane -->
+                        <div class="calc-output-pane">
+                            <div class="calc-output-header">
+                                <span>Maturity Forecast</span>
+                                <span>{{ calcSip.durationMonths }} Months</span>
+                            </div>
+
+                            <div class="calc-breakdown-list">
+                                <div class="breakdown-row">
+                                    <span>Total Gold Accumulated</span>
+                                    <strong style="color: var(--gold);">{{ sipResult.totalGoldGrams }} grams</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>Total Capital Invested</span>
+                                    <strong>{{ formatCurrency(sipResult.totalInvested) }}</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>Est. Future Rate / g</span>
+                                    <strong>{{ formatCurrency(sipResult.futureGoldRate) }}</strong>
+                                </div>
+                                <div class="breakdown-row highlight-row">
+                                    <span>Estimated Wealth Gain</span>
+                                    <strong style="color: var(--success);">+{{ formatCurrency(sipResult.wealthGain) }}</strong>
+                                </div>
+                            </div>
+
+                            <div class="calc-total-banner">
+                                <span class="calc-total-label">Projected Maturity Value</span>
+                                <div class="calc-total-value">{{ formatCurrency(sipResult.projectedMaturityValue) }}</div>
+                                <span class="calc-total-sub">Wealth accumulated at {{ calcSip.cagr }}% CAGR</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 5. TARGET GOAL PLANNER -->
+                    <div class="calc-main-card" v-if="activeCalcTab === 'goal'">
+                        <div class="calc-form-pane">
+                            <div class="calc-form-header">
+                                <div>
+                                    <div class="calc-form-title"><i class="fa-solid fa-bullseye"></i> Target Goal Planner (Weddings & Wealth)</div>
+                                    <div class="calc-form-desc">Plan for wedding jewelry or savings milestones by calculating exact monthly SIP needed.</div>
+                                </div>
+                            </div>
+
+                            <div class="calc-fields-grid">
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Target Type</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.mode === 'weight' }" @click="calcGoal.mode = 'weight'">Target Grams</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.mode === 'money' }" @click="calcGoal.mode = 'money'">Target ₹ Corpus</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group">
+                                    <label class="calc-label">Gold Karat</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.karat === '22' }" @click="calcGoal.karat = '22'">22K (Jewelry)</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.karat === '24' }" @click="calcGoal.karat = '24'">24K (Coins)</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width" v-if="calcGoal.mode === 'weight'">
+                                    <label class="calc-label">Target Gold Weight (grams)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="1" step="1" v-model.number="calcGoal.targetWeight">
+                                </div>
+
+                                <div class="calc-field-group full-width" v-else>
+                                    <label class="calc-label">Target Future Corpus (₹)</label>
+                                    <input type="number" class="input-control" style="padding-left: 0.75rem;" min="10000" step="10000" v-model.number="calcGoal.targetMoney">
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">Time to Goal</label>
+                                    <div class="segmented-group">
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.durationMonths === 6 }" @click="calcGoal.durationMonths = 6">6 Months</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.durationMonths === 12 }" @click="calcGoal.durationMonths = 12">1 Year</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.durationMonths === 24 }" @click="calcGoal.durationMonths = 24">2 Years</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.durationMonths === 36 }" @click="calcGoal.durationMonths = 36">3 Years</button>
+                                        <button class="seg-btn" :class="{ 'active': calcGoal.durationMonths === 60 }" @click="calcGoal.durationMonths = 60">5 Years</button>
+                                    </div>
+                                </div>
+
+                                <div class="calc-field-group full-width">
+                                    <label class="calc-label">
+                                        <span>Expected Annual Return (CAGR)</span>
+                                        <span class="calc-label-badge">{{ calcGoal.cagr }}% per year</span>
+                                    </label>
+                                    <div class="range-slider-wrap">
+                                        <input type="range" class="calc-range-slider" min="4" max="18" step="0.5" v-model.number="calcGoal.cagr">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Output Pane -->
+                        <div class="calc-output-pane">
+                            <div class="calc-output-header">
+                                <span>Goal Strategy</span>
+                                <span>{{ calcGoal.durationMonths }} Months</span>
+                            </div>
+
+                            <div class="calc-breakdown-list">
+                                <div class="breakdown-row">
+                                    <span>Target Goal</span>
+                                    <strong style="color: var(--gold);">{{ goalResult.targetWeight }}g ({{ formatCurrency(goalResult.futureTargetCorpus) }})</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>Total Capital Put In</span>
+                                    <strong>{{ formatCurrency(goalResult.totalInvested) }}</strong>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span>Est. Future Rate / g</span>
+                                    <strong>{{ formatCurrency(goalResult.futureGoldRate) }}</strong>
+                                </div>
+                                <div class="breakdown-row highlight-row">
+                                    <span>Gain from Appreciation</span>
+                                    <strong style="color: var(--success);">+{{ formatCurrency(goalResult.gainFromAppreciation) }}</strong>
+                                </div>
+                            </div>
+
+                            <div class="calc-total-banner">
+                                <span class="calc-total-label">Required Monthly SIP</span>
+                                <div class="calc-total-value" style="color: var(--gold);">{{ formatCurrency(goalResult.requiredMonthlySip) }}<span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">/mo</span></div>
+                                <span class="calc-total-sub">Invest {{ formatCurrency(goalResult.requiredMonthlySip) }} monthly for {{ calcGoal.durationMonths }} months</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
 
@@ -557,6 +1019,14 @@
                     <div class="palette-item" @click="switchTab('products'); commandPaletteOpen = false;">
                         <span><i class="fa-solid fa-grid-2" style="margin-right: 0.5rem;"></i> Go to Product Deck</span>
                         <span class="font-mono" style="font-size: 0.72rem; color: var(--text-muted);">Nav</span>
+                    </div>
+                    <div class="palette-item" @click="switchTab('calculators'); setCalcTab('bill'); commandPaletteOpen = false;">
+                        <span><i class="fa-solid fa-calculator" style="margin-right: 0.5rem; color: var(--gold);"></i> Open Jewelry Bill Calculator</span>
+                        <span class="font-mono" style="font-size: 0.72rem; color: var(--text-muted);">Tools</span>
+                    </div>
+                    <div class="palette-item" @click="switchTab('calculators'); setCalcTab('sip'); commandPaletteOpen = false;">
+                        <span><i class="fa-solid fa-piggy-bank" style="margin-right: 0.5rem; color: var(--gold);"></i> Open Gold SIP Accumulator</span>
+                        <span class="font-mono" style="font-size: 0.72rem; color: var(--text-muted);">Tools</span>
                     </div>
                     <div class="palette-item" @click="switchTab('archive'); commandPaletteOpen = false;">
                         <span><i class="fa-solid fa-clock-rotate-left" style="margin-right: 0.5rem;"></i> Open Scan Archive</span>
@@ -645,6 +1115,11 @@
                 <span class="mobile-nav-badge" v-if="filteredProducts.length">{{ filteredProducts.length }}</span>
             </button>
 
+            <button class="mobile-nav-item" :class="{ active: activeTab === 'calculators' }" @click="switchTab('calculators')">
+                <i class="fa-solid fa-calculator"></i>
+                <span>Tools</span>
+            </button>
+
             <button class="mobile-nav-item" :class="{ active: activeTab === 'insights' }" @click="switchTab('insights')">
                 <i class="fa-solid fa-chart-line"></i>
                 <span>Analytics</span>
@@ -665,6 +1140,6 @@
     </div>
 
     <!-- Application JavaScript logic -->
-    <script src="/static/app.js?v=20260816_3"></script>
+    <script src="/static/app.js?v=20260827_1"></script>
 </body>
 </html>

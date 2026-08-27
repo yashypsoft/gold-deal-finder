@@ -867,118 +867,195 @@ class GoldScraper:
             rate_cache[(pur, True)] = self.price_calculator.calculate_expected_price(1.0, pur, True)['total_expected']
             rate_cache[(pur, False)] = self.price_calculator.calculate_expected_price(1.0, pur, False)['total_expected']
 
-        def process_product(p: Dict) -> Optional[Dict]:
-            title = p.get('title', '')
-            if not title or not is_real_gold_product(title):
+        def parse_weight_val(val) -> Optional[float]:
+            if not val:
                 return None
-            if 'silver' in title.lower():
-                return None
+            m = re.search(r'(\d+\.?\d*)', str(val))
+            if m:
+                w = float(m.group(1))
+                if 0.3 <= w <= 5000:
+                    return w
+            return None
 
-            purity, title_weight = self.extract_purity_and_weight(title)
-            if not purity:
-                purity = '22K'
+        def process_product(p: Dict) -> List[Dict]:
+            title = p.get('title', '').strip()
+            if not title or not is_real_gold_product(title) or 'silver' in title.lower():
+                return []
+
+            title_purity, title_weight = self.extract_purity_and_weight(title)
 
             slug = p.get('slug', '')
             landing_url = f"https://www.bhimagold.com/products/{slug}" if slug else "https://www.bhimagold.com"
 
-            weight = None
-
-            # PRIORITY 1: Always open product page to extract exact metal_weight (or gross_weight / weight) first
+            pdp_variants = {}
+            pdp_variants_list = []
+            datass = {}
             if slug:
                 try:
-                    r_pdp = session.get(landing_url, headers=headers, timeout=5)
+                    r_pdp = session.get(landing_url, headers=headers, timeout=6)
                     if r_pdp.status_code == 200:
-                        mw_m = re.search(r'"metal_weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
-                        if mw_m:
-                            weight = float(mw_m.group(1))
-                        else:
-                            gw_m = re.search(r'"gross_weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
-                            if gw_m:
-                                weight = float(gw_m.group(1))
-                            else:
-                                w_m = re.search(r'"weight"\s*:\s*"([0-9\.]+)\s*g"', r_pdp.text)
-                                if w_m:
-                                    weight = float(w_m.group(1))
+                        m_next = re.search(r'<script id=\"__NEXT_DATA__\"[^>]*>(.*?)</script>', r_pdp.text)
+                        if m_next:
+                            pdp_json = json.loads(m_next.group(1))
+                            datass = pdp_json.get('props', {}).get('pageProps', {}).get('datass', {})
+                            pdp_variants_list = datass.get('variantItems', [])
+                            for v in pdp_variants_list:
+                                sku = str(v.get('extSKUId') or (v.get('_eattrs', {}).get('sku') if isinstance(v.get('_eattrs'), dict) else '') or '').strip()
+                                if sku:
+                                    pdp_variants[sku] = v
                 except Exception:
                     pass
 
-            # PRIORITY 2: Check product object attributes / variantItems if PDP did not yield weight
-            if not weight:
-                for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'GrossWeight', 'NetWeight']:
-                    val = p.get(key)
-                    if val:
-                        m = re.search(r'(\d+\.?\d*)', str(val))
-                        if m:
-                            w = float(m.group(1))
-                            if 0.3 <= w <= 5000:
-                                weight = w
+            v_list = p.get('variantItems', [])
+            if not v_list and pdp_variants_list:
+                v_list = pdp_variants_list
+            if not v_list:
+                v_list = [{}]
+
+            has_multiple_variants = len(v_list) > 1
+            results = []
+
+            for v_prod in v_list:
+                sku = str(v_prod.get('extSKUId') or (v_prod.get('_eattrs', {}).get('sku') if isinstance(v_prod.get('_eattrs'), dict) else '') or '').strip()
+                v_pdp = pdp_variants.get(sku) if sku else (pdp_variants_list[0] if len(pdp_variants_list) == 1 else {})
+                if not v_pdp and pdp_variants_list:
+                    v_pdp = pdp_variants_list[0]
+
+                weight = None
+
+                # PRIORITY 1: Current variant from PDP (__NEXT_DATA__)
+                if v_pdp:
+                    eattrs = v_pdp.get('_eattrs', {}) if isinstance(v_pdp, dict) else {}
+                    # Exact metal weight of this current variant
+                    weight = parse_weight_val(eattrs.get('metal_weight')) or parse_weight_val(v_pdp.get('metal_weight'))
+                    # Exact gold_data weight of this current variant
+                    if not weight and eattrs.get('gold_data'):
+                        gd = eattrs.get('gold_data')
+                        if isinstance(gd, list) and gd and isinstance(gd[0], dict) and gd[0].get('weight'):
+                            try:
+                                w_gd = float(gd[0]['weight'])
+                                if 0.3 <= w_gd <= 5000:
+                                    weight = w_gd
+                            except Exception:
+                                pass
+                    # Variant weight / gross weight of this current variant
+                    if not weight:
+                        for k in ['weight', 'gross_weight', 'Weight(gram)', 'GrossWeight', 'NetWeight']:
+                            weight = parse_weight_val(eattrs.get(k)) or parse_weight_val(v_pdp.get(k))
+                            if weight:
                                 break
 
-            if not weight:
-                for v in p.get('variantItems', []):
-                    eattrs = v.get('_eattrs', {}) if isinstance(v, dict) else {}
-                    for key in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'Weight(gram)']:
-                        val = eattrs.get(key) or (v.get(key) if isinstance(v, dict) else None)
-                        if val:
-                            m = re.search(r'(\d+\.?\d*)', str(val))
-                            if m:
-                                w = float(m.group(1))
-                                if 0.3 <= w <= 5000:
-                                    weight = w
-                                    break
-                    if weight:
-                        break
+                # PRIORITY 2: Current variant from API product list
+                if not weight and v_prod:
+                    eattrs = v_prod.get('_eattrs', {}) if isinstance(v_prod, dict) else {}
+                    for k in ['metal_weight', 'weight', 'gross_weight', 'Weight(gram)']:
+                        weight = parse_weight_val(eattrs.get(k)) or parse_weight_val(v_prod.get(k))
+                        if weight:
+                            break
 
-            # PRIORITY 3: Title weight
-            if not weight and title_weight and title_weight >= 0.3:
-                weight = title_weight
+                # PRIORITY 3: Product-level / datass-level weight
+                if not weight:
+                    for k in ['metal_weight', 'gross_weight', 'grossWeight', 'gross_wt', 'grossWt', 'weight', 'GrossWeight', 'NetWeight']:
+                        weight = parse_weight_val(p.get(k)) or parse_weight_val(datass.get(k)) or parse_weight_val(datass.get('_eattrs', {}).get(k) if isinstance(datass.get('_eattrs'), dict) else None)
+                        if weight:
+                            break
 
-            raw_price = float(p.get('converted_special_price', 0) or 0)
-            if raw_price <= 0:
-                return None
-            selling_price = raw_price / 100.0 if raw_price > 100000 else raw_price
-            if selling_price < 1000:
-                return None
+                # PRIORITY 4: Title weight
+                if not weight and title_weight and title_weight >= 0.3:
+                    weight = title_weight
 
-            product_type = self.determine_product_type(title)
-            is_jewellery = (product_type == 'jewellery')
+                # Selling price for current variant
+                selling_price = 0.0
+                if v_pdp:
+                    eattrs = v_pdp.get('_eattrs', {}) if isinstance(v_pdp, dict) else {}
+                    sp = eattrs.get('special_price')
+                    if sp:
+                        try:
+                            selling_price = float(str(sp).replace(',', ''))
+                        except Exception:
+                            pass
+                    if selling_price <= 0 and v_pdp.get('priceDiscounted'):
+                        selling_price = float(v_pdp.get('priceDiscounted')) / 100.0
 
-            # PRIORITY 4 (FALLBACK ONLY): Estimate weight from selling price if all above are missing
-            if not weight or weight < 0.3:
-                rate_per_gram = rate_cache.get((purity, is_jewellery), 6500.0)
-                if rate_per_gram > 0:
-                    weight = round(selling_price / rate_per_gram, 2)
+                if selling_price <= 0 and v_prod:
+                    eattrs = v_prod.get('_eattrs', {}) if isinstance(v_prod, dict) else {}
+                    sp = eattrs.get('special_price')
+                    if sp:
+                        try:
+                            selling_price = float(str(sp).replace(',', ''))
+                        except Exception:
+                            pass
+                    if selling_price <= 0 and v_prod.get('priceDiscounted'):
+                        selling_price = float(v_prod.get('priceDiscounted')) / 100.0
 
-            if not weight or weight < 0.3:
-                return None
+                if selling_price <= 0:
+                    raw_price = float(p.get('converted_special_price', 0) or 0)
+                    selling_price = raw_price / 100.0 if raw_price > 100000 else raw_price
 
-            expected_price_info = self.price_calculator.calculate_expected_price(weight, purity, is_jewellery)
-            expected_price = expected_price_info['total_expected']
-            discount_percent = self.price_calculator.calculate_discount_percentage(selling_price, expected_price)
-            price_per_gram = selling_price / weight
+                if selling_price < 1000:
+                    continue
 
-            img_url = p.get('image', '')
+                # Purity detection
+                purity = title_purity
+                if v_pdp and isinstance(v_pdp, dict) and v_pdp.get('_eattrs', {}).get('purity'):
+                    pur_str = str(v_pdp['_eattrs']['purity']).upper()
+                    if '24' in pur_str or '999' in pur_str:
+                        purity = '24K'
+                    elif '22' in pur_str or '916' in pur_str:
+                        purity = '22K'
+                    elif '18' in pur_str or '750' in pur_str:
+                        purity = '18K'
+                    elif '14' in pur_str or '585' in pur_str:
+                        purity = '14K'
+                if not purity:
+                    purity = '22K'
 
-            return {
-                'source': 'Bhima Gold',
-                'title': title,
-                'weight_grams': weight,
-                'purity': purity,
-                'product_type': product_type,
-                'is_jewellery': is_jewellery,
-                'selling_price': selling_price,
-                'original_price': selling_price,
-                'expected_price': round(expected_price, 2),
-                'discount_percent': discount_percent,
-                'price_per_gram': round(price_per_gram, 2),
-                'url': landing_url,
-                'image_url': img_url,
-                'brand': 'Bhima Gold',
-                'spot_price': expected_price_info['spot_price_per_gram'],
-                'making_charges_percent': expected_price_info['making_charges_percent'],
-                'gst_percent': expected_price_info['gst_percent'],
-                'timestamp': datetime.now().isoformat()
-            }
+                product_type = self.determine_product_type(title)
+                is_jewellery = (product_type == 'jewellery')
+
+                # PRIORITY 5 (FALLBACK ONLY): Estimate weight from selling price if all above are missing
+                if not weight or weight < 0.3:
+                    rate_per_gram = rate_cache.get((purity, is_jewellery), 6500.0)
+                    if rate_per_gram > 0:
+                        weight = round(selling_price / rate_per_gram, 2)
+
+                if not weight or weight < 0.3:
+                    continue
+
+                expected_price_info = self.price_calculator.calculate_expected_price(weight, purity, is_jewellery)
+                expected_price = expected_price_info['total_expected']
+                discount_percent = self.price_calculator.calculate_discount_percentage(selling_price, expected_price)
+                price_per_gram = selling_price / weight
+
+                variant_title = title
+                if has_multiple_variants and weight and f"{weight}g" not in title.lower() and f"{weight} g" not in title.lower():
+                    variant_title = f"{title} ({weight}g)"
+
+                item_url = f"{landing_url}?sku={sku}" if (has_multiple_variants and sku) else landing_url
+                img_url = v_prod.get('image') or p.get('image') or ''
+
+                results.append({
+                    'source': 'Bhima Gold',
+                    'title': variant_title,
+                    'weight_grams': weight,
+                    'purity': purity,
+                    'product_type': product_type,
+                    'is_jewellery': is_jewellery,
+                    'selling_price': selling_price,
+                    'original_price': selling_price,
+                    'expected_price': round(expected_price, 2),
+                    'discount_percent': discount_percent,
+                    'price_per_gram': round(price_per_gram, 2),
+                    'url': item_url,
+                    'image_url': img_url,
+                    'brand': 'Bhima Gold',
+                    'spot_price': expected_price_info['spot_price_per_gram'],
+                    'making_charges_percent': expected_price_info['making_charges_percent'],
+                    'gst_percent': expected_price_info['gst_percent'],
+                    'timestamp': datetime.now().isoformat()
+                })
+
+            return results
 
         def fetch_term(term: str):
             term_products = []
@@ -995,9 +1072,8 @@ class GoldScraper:
                         break
 
                     for p in pl:
-                        item = process_product(p)
-                        if item:
-                            term_products.append(item)
+                        items = process_product(p)
+                        term_products.extend(items)
                     page += 1
                 except Exception as e:
                     print(f"Bhima Gold error term {term} page {page}: {e}")
@@ -1014,9 +1090,8 @@ class GoldScraper:
                 data = r.json().get('data', {})
                 pl = data.get('productList', [])
                 for p in pl:
-                    item = process_product(p)
-                    if item:
-                        slug_products.append(item)
+                    items = process_product(p)
+                    slug_products.extend(items)
             except Exception:
                 pass
             return slug_products
@@ -1037,8 +1112,9 @@ class GoldScraper:
             futures.extend([ex.submit(fetch_slug_page, p) for p in range(1, total_pages + 1)])
             for f in as_completed(futures):
                 for item in f.result():
-                    if item['url'] not in unique_map:
-                        unique_map[item['url']] = item
+                    key = (item['title'], item['url'])
+                    if key not in unique_map:
+                        unique_map[key] = item
 
         products = list(unique_map.values())
         print(f"✅ Bhima Gold total: {len(products)}")

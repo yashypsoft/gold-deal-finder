@@ -29,11 +29,49 @@
 
         data: {
             activeTab: 'products',
+            activeCalcTab: 'bill',
             sidebarCollapsed: localStorage.getItem('goldSidebarCollapsed') === 'true',
             commandPaletteOpen: false,
             paletteQuery: '',
             showFilterDrawer: false,
             showSourcesInfo: false,
+
+            // Interactive Investment & Calculation Suite State
+            calcBill: {
+                weight: 10,
+                unit: 'gram',
+                karat: '22',
+                makingPercent: 8,
+                discountPerGram: 0,
+                includeGst: true,
+            },
+            calcBudget: {
+                amount: 50000,
+                karat: '22',
+            },
+            calcWorth: {
+                weight: 25,
+                unit: 'gram',
+                karat: '22',
+                buyPricePerGram: 0,
+                buyDate: '',
+            },
+            calcSip: {
+                mode: 'budget',
+                amount: 5000,
+                weight: 1,
+                karat: '24',
+                durationMonths: 12,
+                cagr: 10,
+            },
+            calcGoal: {
+                mode: 'weight',
+                targetWeight: 25,
+                targetMoney: 200000,
+                karat: '22',
+                durationMonths: 24,
+                cagr: 10,
+            },
 
             loading: true,
             loadingProducts: false,
@@ -213,7 +251,157 @@
             },
 
             liveSpotPrice() {
-                return numeric(this.spotPrice?.gold?.per_gram?.['999_landed']);
+                return numeric(this.spotPrice?.gold?.per_gram?.['999_landed'], 8800);
+            },
+
+            karatRates() {
+                const spot24 = this.liveSpotPrice > 0 ? this.liveSpotPrice : 8800;
+                return {
+                    '24': spot24,
+                    '22': Math.round(spot24 * (22 / 24)),
+                    '18': Math.round(spot24 * (18 / 24)),
+                    '14': Math.round(spot24 * (14 / 24)),
+                    '9': Math.round(spot24 * (9 / 24)),
+                };
+            },
+
+            billResult() {
+                const unitMultipliers = { gram: 1, pavan: 8, tola: 11.6638 };
+                const mult = unitMultipliers[this.calcBill.unit] || 1;
+                const weightGrams = (numeric(this.calcBill.weight) || 0) * mult;
+                const rate = this.karatRates[this.calcBill.karat] || this.karatRates['22'];
+                const goldValue = weightGrams * rate;
+                const discount = (numeric(this.calcBill.discountPerGram) || 0) * weightGrams;
+                const effectiveGoldValue = Math.max(0, goldValue - discount);
+                const makingCharges = effectiveGoldValue * ((numeric(this.calcBill.makingPercent) || 0) / 100);
+                const subtotal = effectiveGoldValue + makingCharges;
+                const gst = this.calcBill.includeGst ? subtotal * 0.03 : 0;
+                const total = subtotal + gst;
+
+                return {
+                    weightGrams: Math.round(weightGrams * 100) / 100,
+                    ratePerGram: rate,
+                    goldValue: Math.round(goldValue),
+                    discount: Math.round(discount),
+                    effectiveGoldValue: Math.round(effectiveGoldValue),
+                    makingCharges: Math.round(makingCharges),
+                    gst: Math.round(gst),
+                    total: Math.round(total),
+                };
+            },
+
+            budgetResult() {
+                const amount = numeric(this.calcBudget.amount);
+                const rate = this.karatRates[this.calcBudget.karat] || this.karatRates['22'];
+                const grams = rate > 0 ? amount / rate : 0;
+                const pavans = grams / 8;
+                const tolas = grams / 11.6638;
+
+                return {
+                    ratePerGram: rate,
+                    grams: Math.round(grams * 1000) / 1000,
+                    pavans: Math.round(pavans * 100) / 100,
+                    tolas: Math.round(tolas * 100) / 100,
+                };
+            },
+
+            worthResult() {
+                const unitMultipliers = { gram: 1, pavan: 8, tola: 11.6638 };
+                const mult = unitMultipliers[this.calcWorth.unit] || 1;
+                const weightGrams = (numeric(this.calcWorth.weight) || 0) * mult;
+                const rate = this.karatRates[this.calcWorth.karat] || this.karatRates['22'];
+                const currentWorth = weightGrams * rate;
+                const buyPrice = numeric(this.calcWorth.buyPricePerGram);
+                const invested = buyPrice > 0 ? weightGrams * buyPrice : 0;
+                const profitLoss = invested > 0 ? currentWorth - invested : 0;
+                const returnsPercent = invested > 0 ? (profitLoss / invested) * 100 : 0;
+
+                return {
+                    weightGrams: Math.round(weightGrams * 100) / 100,
+                    ratePerGram: rate,
+                    currentWorth: Math.round(currentWorth),
+                    invested: Math.round(invested),
+                    profitLoss: Math.round(profitLoss),
+                    returnsPercent: Math.round(returnsPercent * 10) / 10,
+                };
+            },
+
+            sipResult() {
+                const rate = this.karatRates[this.calcSip.karat] || this.karatRates['24'];
+                const months = numeric(this.calcSip.durationMonths, 12);
+                const cagr = numeric(this.calcSip.cagr, 10);
+                const isBudgetMode = this.calcSip.mode === 'budget';
+
+                let monthlyAmount = 0;
+                let monthlyWeight = 0;
+
+                if (isBudgetMode) {
+                    monthlyAmount = numeric(this.calcSip.amount, 5000);
+                    monthlyWeight = rate > 0 ? monthlyAmount / rate : 0;
+                } else {
+                    monthlyWeight = numeric(this.calcSip.weight, 1);
+                    monthlyAmount = monthlyWeight * rate;
+                }
+
+                const totalGoldAccumulated = monthlyWeight * months;
+                const totalInvested = monthlyAmount * months;
+                const futureGoldRate = rate * Math.pow(1 + (cagr / 100), months / 12);
+                const projectedMaturityValue = totalGoldAccumulated * futureGoldRate;
+                const wealthGain = projectedMaturityValue - totalInvested;
+
+                return {
+                    ratePerGram: rate,
+                    monthlyAmount: Math.round(monthlyAmount),
+                    monthlyWeight: Math.round(monthlyWeight * 100) / 100,
+                    totalGoldGrams: Math.round(totalGoldAccumulated * 100) / 100,
+                    totalInvested: Math.round(totalInvested),
+                    futureGoldRate: Math.round(futureGoldRate),
+                    projectedMaturityValue: Math.round(projectedMaturityValue),
+                    wealthGain: Math.round(wealthGain),
+                };
+            },
+
+            goalResult() {
+                const rate = this.karatRates[this.calcGoal.karat] || this.karatRates['22'];
+                const months = numeric(this.calcGoal.durationMonths, 24);
+                const cagr = numeric(this.calcGoal.cagr, 10);
+                const isWeightMode = this.calcGoal.mode === 'weight';
+
+                let targetWeight = 0;
+                let futureTargetCorpus = 0;
+
+                const futureGoldRate = rate * Math.pow(1 + (cagr / 100), months / 12);
+
+                if (isWeightMode) {
+                    targetWeight = numeric(this.calcGoal.targetWeight, 25);
+                    futureTargetCorpus = targetWeight * futureGoldRate;
+                } else {
+                    futureTargetCorpus = numeric(this.calcGoal.targetMoney, 200000);
+                    targetWeight = futureGoldRate > 0 ? futureTargetCorpus / futureGoldRate : 0;
+                }
+
+                // SIP required formula with compounding: SIP = Target * r / [((1+r)^n - 1) * (1+r)]
+                const monthlyRate = (cagr / 100) / 12;
+                let requiredMonthlySip = 0;
+                if (monthlyRate > 0) {
+                    const compoundFactor = Math.pow(1 + monthlyRate, months);
+                    requiredMonthlySip = futureTargetCorpus * (monthlyRate / ((compoundFactor - 1) * (1 + monthlyRate)));
+                } else {
+                    requiredMonthlySip = futureTargetCorpus / months;
+                }
+
+                const totalInvested = requiredMonthlySip * months;
+                const gainFromAppreciation = Math.max(0, futureTargetCorpus - totalInvested);
+
+                return {
+                    ratePerGram: rate,
+                    futureGoldRate: Math.round(futureGoldRate),
+                    targetWeight: Math.round(targetWeight * 100) / 100,
+                    futureTargetCorpus: Math.round(futureTargetCorpus),
+                    requiredMonthlySip: Math.round(requiredMonthlySip),
+                    totalInvested: Math.round(totalInvested),
+                    gainFromAppreciation: Math.round(gainFromAppreciation),
+                };
             },
 
             bestCurrentDeal() {
@@ -455,6 +643,57 @@
                 if (tab === 'insights') {
                     this.$nextTick(() => this.renderCharts());
                 }
+            },
+
+            setCalcTab(tab) {
+                this.activeCalcTab = tab;
+            },
+
+            getPurityKaratNumber(purityStr) {
+                const clean = String(purityStr || '').toUpperCase();
+                if (clean.includes('24') || clean.includes('999')) return '24';
+                if (clean.includes('22') || clean.includes('916')) return '22';
+                if (clean.includes('18') || clean.includes('750')) return '18';
+                if (clean.includes('14') || clean.includes('585')) return '14';
+                if (clean.includes('9') || clean.includes('375')) return '9';
+                return '22';
+            },
+
+            getMeltBreakdown(product) {
+                const weight = numeric(product.weight_grams);
+                const karat = this.getPurityKaratNumber(product.purity);
+                const rate = this.karatRates[karat] || this.karatRates['22'];
+                const meltValue = Math.round(weight * rate);
+                const rawWithGst = Math.round(meltValue * 1.03);
+                const sellingPrice = numeric(product.selling_price);
+                const makingMarkup = Math.round(Math.max(0, sellingPrice - rawWithGst));
+                const makingPercent = meltValue > 0 ? Math.round((makingMarkup / meltValue) * 100 * 10) / 10 : 0;
+
+                return {
+                    karat,
+                    meltValue,
+                    rawWithGst,
+                    makingMarkup,
+                    makingPercent,
+                };
+            },
+
+            openProductInCalculator(product) {
+                if (!product) return;
+                const karat = this.getPurityKaratNumber(product.purity);
+                this.calcBill.weight = numeric(product.weight_grams, 10);
+                this.calcBill.unit = 'gram';
+                this.calcBill.karat = karat;
+                this.calcBill.discountPerGram = 0;
+                this.calcBill.includeGst = true;
+
+                // Estimate making %
+                const melt = this.getMeltBreakdown(product);
+                this.calcBill.makingPercent = melt.makingPercent > 0 ? melt.makingPercent : 8;
+
+                this.switchTab('calculators');
+                this.activeCalcTab = 'bill';
+                this.notify(`Loaded "${product.title.slice(0, 30)}..." into Jewelry Bill Calculator`, 'info');
             },
 
             getSavingsRupees(product) {

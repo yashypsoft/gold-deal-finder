@@ -699,13 +699,49 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
         "brand": "Tanishq (Titan)",
         "tagline": "Official Tata Gold Rate",
         "location": "ALL INDIA STORES",
-        "rate_24k_per_g": 15850.00,
-        "rate_22k_per_g": 14530.00,
-        "rate_24k_10g": 158500.00,
-        "rate_22k_8g": 116240.00,
+        "rate_24k_per_g": 16151.00,
+        "rate_22k_per_g": 14805.00,
+        "rate_18k_per_g": 12113.00,
+        "rate_24k_10g": 161510.00,
+        "rate_22k_8g": 118440.00,
         "updated_at": datetime.now().isoformat(),
         "source_url": "https://www.tanishq.co.in/gold-rate.html"
     }
+    try:
+        try:
+            from curl_cffi import requests as c_requests
+            session_tq = c_requests.Session(impersonate='chrome120')
+        except Exception:
+            session_tq = requests.Session()
+
+        r_tq = session_tq.get('https://www.tanishq.co.in/gold-rate.html', timeout=8)
+        if r_tq.status_code == 200 and r_tq.text:
+            m_tq = re.search(r'data-goldrate22kt=\"(\d+)\"[^>]*data-goldrate24kt=\"(\d+)\"(?:[^>]*data-goldrate18kt=\"(\d+)\")?', r_tq.text)
+            if not m_tq:
+                m_tq = re.search(r'data-goldrate24kt=\"(\d+)\"[^>]*data-goldrate22kt=\"(\d+)\"', r_tq.text)
+                if m_tq:
+                    r24 = float(m_tq.group(1))
+                    r22 = float(m_tq.group(2))
+                    r18 = round(r24 * 0.75, 2)
+            else:
+                r22 = float(m_tq.group(1))
+                r24 = float(m_tq.group(2))
+                r18 = float(m_tq.group(3)) if m_tq.group(3) else round(r24 * 0.75, 2)
+
+            if m_tq:
+                date_m = re.search(r'<td>(\d{2}-\d{2}-\d{4})</td>\s*<td>[^<]*<span[^>]*class=[\"\']goldpurity-rate[\"\']', r_tq.text)
+                date_str = date_m.group(1) if date_m else datetime.now().strftime('%d-%m-%Y')
+                tanishq_data.update({
+                    "rate_24k_per_g": r24,
+                    "rate_22k_per_g": r22,
+                    "rate_18k_per_g": r18,
+                    "rate_24k_10g": round(r24 * 10, 2),
+                    "rate_22k_8g": round(r22 * 8, 2),
+                    "updated_at": datetime.now().isoformat(),
+                    "rate_date": date_str
+                })
+    except Exception as e:
+        print(f"Error fetching live Tanishq rates: {e}")
 
     # Fetch MMTC-PAMP Rate
     mmtc_data = {
