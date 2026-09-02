@@ -370,7 +370,7 @@ async def startup_event() -> None:
     ensure_sample_data_if_empty()
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
