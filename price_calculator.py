@@ -211,8 +211,8 @@ class GoldPriceCalculator:
         """Fetch gold price from a specific API endpoint and return complete data"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
             }
 
             # Add custom headers if provided
@@ -222,12 +222,22 @@ class GoldPriceCalculator:
             params = endpoint_config.get('params', {})
             
             logger.info(f"Trying {endpoint_config['name']} API...")
-            response = requests.get(
-                endpoint_config['url'],
-                headers=headers,
-                params=params,
-                timeout=15
-            )
+            try:
+                from curl_cffi import requests as cffi_requests
+                response = cffi_requests.get(
+                    endpoint_config['url'],
+                    headers=headers,
+                    params=params,
+                    impersonate='chrome120',
+                    timeout=4
+                )
+            except Exception:
+                response = requests.get(
+                    endpoint_config['url'],
+                    headers=headers,
+                    params=params,
+                    timeout=4
+                )
             
             # Check if response is valid
             if response.status_code != 200:
@@ -246,9 +256,6 @@ class GoldPriceCalculator:
             logger.info(f"Successfully fetched from {endpoint_config['name']}")
             return output
             
-        except requests.RequestException as e:
-            logger.warning(f"Network error with {endpoint_config['name']}: {e}")
-            return None
         except Exception as e:
             logger.warning(f"Error with {endpoint_config['name']}: {e}")
             return None
@@ -260,26 +267,20 @@ class GoldPriceCalculator:
         Args:
             force_refresh: If True, bypass cache and fetch fresh data
         """
-        # Use lock to prevent multiple simultaneous API calls
+        current_time = time.time()
+        # Fast in-memory cache check without locking
+        if not force_refresh and hasattr(self, '_memory_cache') and self._memory_cache:
+            if current_time - getattr(self, '_memory_cache_time', 0) < self.CACHE_TTL:
+                return self._memory_cache
+
         with self._cache_lock:
-            # Check cache first (unless force refresh)
+            # Check disk cache
             if not force_refresh:
                 cached_data = self._read_cache_safe()
                 if cached_data and self._is_cache_valid(cached_data):
-                    logger.info("Using cached gold prices")
+                    self._memory_cache = cached_data
+                    self._memory_cache_time = current_time
                     return cached_data
-            
-            # Check if we recently made an API call (rate limiting)
-            current_time = time.time()
-            if current_time - self._last_api_call < self._min_api_interval:
-                logger.info("Rate limiting: using cache or fallback")
-                cached_data = self._read_cache_safe()
-                if cached_data:
-                    # Mark as cached but return it
-                    cached_data['source'] = 'cached_rate_limited'
-                    return cached_data
-                # If no cache, wait a bit
-                time.sleep(self._min_api_interval)
             
             # Try multiple APIs
             output = None
@@ -292,10 +293,11 @@ class GoldPriceCalculator:
             
             # If all APIs fail, use fallback calculation
             if output is None:
-                logger.warning("All APIs failed, using fallback calculation")
-                return self._calculate_fallback_prices()
+                output = self._calculate_fallback_prices()
             
-            # Save to cache
+            # Save to memory and disk cache
+            self._memory_cache = output
+            self._memory_cache_time = time.time()
             self._write_cache_safe(output)
             
             return output

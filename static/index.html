@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Gold Deal Finder — Market Intelligence</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.svg">
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1244,6 +1247,151 @@
                 <div style="display: flex; justify-content: flex-end;">
                     <button class="btn-primary" @click="showSourcesInfo = false">Close</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Live Scan Progress Modal (Maximizable / Minimizable) -->
+        <div class="palette-overlay scan-progress-overlay" v-if="scanProgress.active && !scanProgress.minimized" @click.self="minimizeScanModal">
+            <div class="scan-progress-box">
+                <!-- Modal Header -->
+                <div class="scan-progress-header">
+                    <div class="scan-header-left">
+                        <div class="scan-status-pill" :class="scanProgress.status">
+                            <span class="pulse-dot"></span>
+                            <span v-if="scanProgress.status === 'running'">LIVE SCANNING</span>
+                            <span v-else-if="scanProgress.status === 'completed'">SCAN COMPLETED</span>
+                            <span v-else-if="scanProgress.status === 'error'">SCAN ERROR</span>
+                            <span v-else>IDLE</span>
+                        </div>
+                        <h3 class="scan-title">
+                            Live Multi-Store Gold Scraping
+                            <span class="scan-id-tag" v-if="scanProgress.scan_id">#{{ scanProgress.scan_id }}</span>
+                        </h3>
+                    </div>
+
+                    <div class="scan-header-actions">
+                        <button class="btn-icon scan-action-btn" @click="minimizeScanModal" title="Minimize to background dock">
+                            <i class="fa-solid fa-window-minimize"></i>
+                        </button>
+                        <button class="btn-icon scan-action-btn" @click="closeScanModal" title="Close / Dismiss">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Stats Bar -->
+                <div class="scan-progress-meta">
+                    <div class="scan-stat-item">
+                        <span class="stat-label">Elapsed Time</span>
+                        <span class="stat-value font-mono">{{ scanProgress.elapsed_seconds.toFixed(1) }}s</span>
+                    </div>
+                    <div class="scan-stat-item">
+                        <span class="stat-label">Overall Progress</span>
+                        <span class="stat-value font-mono">{{ scanProgress.progress_percent }}%</span>
+                    </div>
+                    <div class="scan-stat-item">
+                        <span class="stat-label">Total Found</span>
+                        <span class="stat-value font-mono text-emerald">{{ scanProgress.total_products }} Items</span>
+                    </div>
+                    <div class="scan-stat-item">
+                        <span class="stat-label">Active Target</span>
+                        <span class="stat-value truncate-text" :title="scanProgress.current_site">{{ scanProgress.current_site || 'Working...' }}</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar Visual -->
+                <div class="scan-progress-bar-container">
+                    <div class="scan-progress-bar-fill" :style="{ width: scanProgress.progress_percent + '%' }">
+                        <div class="scan-bar-glow"></div>
+                    </div>
+                </div>
+
+                <!-- 9 Stores Live Status Grid -->
+                <div class="scan-sites-section">
+                    <div class="section-subtitle">Target Dealers & Marketplaces (9 Sources)</div>
+                    <div class="scan-sites-grid">
+                        <div v-for="site in scanProgress.sites" :key="site.key" class="site-status-card" :class="site.status">
+                            <div class="site-card-top">
+                                <span class="site-name">{{ site.name }}</span>
+                                <span class="site-badge" :class="site.status">
+                                    <i v-if="site.status === 'running'" class="fa-solid fa-circle-notch fa-spin"></i>
+                                    <i v-else-if="site.status === 'completed'" class="fa-solid fa-check"></i>
+                                    <i v-else-if="site.status === 'error'" class="fa-solid fa-triangle-exclamation"></i>
+                                    <i v-else class="fa-regular fa-clock"></i>
+                                    <span v-if="site.status === 'running'">Scraping</span>
+                                    <span v-else-if="site.status === 'completed'">{{ site.count }} found</span>
+                                    <span v-else-if="site.status === 'error'">Failed</span>
+                                    <span v-else>Queued</span>
+                                </span>
+                            </div>
+                            <div class="site-card-msg">{{ site.message || 'Waiting...' }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Stream Event Logs -->
+                <div class="scan-logs-section">
+                    <div class="section-subtitle">Live Activity Stream</div>
+                    <div class="scan-logs-terminal">
+                        <div v-if="!scanProgress.logs || scanProgress.logs.length === 0" class="log-empty">
+                            Waiting for scraping events...
+                        </div>
+                        <div v-for="(log, idx) in scanProgress.logs.slice().reverse()" :key="idx" class="log-entry" :class="'log-' + log.type">
+                            <span class="log-time font-mono">[{{ log.timestamp }}]</span>
+                            <span class="log-tag">[{{ log.site }}]</span>
+                            <span class="log-msg">{{ log.message }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Action Controls -->
+                <div class="scan-progress-footer">
+                    <div class="footer-left">
+                        <span v-if="scanProgress.is_running" class="scan-tip">
+                            <i class="fa-solid fa-info-circle"></i> You can minimize this popup anytime. Scraping continues in the background.
+                        </span>
+                        <span v-else-if="scanProgress.status === 'completed'" class="scan-tip text-emerald">
+                            <i class="fa-solid fa-circle-check"></i> Scan finished successfully! Latest products loaded.
+                        </span>
+                    </div>
+
+                    <div class="footer-actions">
+                        <button v-if="scanProgress.is_running" class="btn-secondary" @click="minimizeScanModal">
+                            <i class="fa-solid fa-down-left-and-up-right-to-center"></i> Minimize to Dock
+                        </button>
+                        <button v-if="scanProgress.status === 'completed' || scanProgress.status === 'error'" class="btn-primary" @click="closeScanModal">
+                            <i class="fa-solid fa-check"></i> Done & View Results
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Minimized Scan Dock (Bottom-Right corner) -->
+        <div class="scan-minimized-dock" v-if="scanProgress.active && scanProgress.minimized" @click="maximizeScanModal">
+            <div class="dock-radar" :class="scanProgress.status">
+                <i v-if="scanProgress.is_running" class="fa-solid fa-rotate fa-spin"></i>
+                <i v-else-if="scanProgress.status === 'completed'" class="fa-solid fa-circle-check text-emerald"></i>
+                <i v-else class="fa-solid fa-triangle-exclamation text-crimson"></i>
+            </div>
+            <div class="dock-content">
+                <div class="dock-title-row">
+                    <span class="dock-title">
+                        {{ scanProgress.is_running ? 'Scraping 9 Stores...' : (scanProgress.status === 'completed' ? 'Scan Complete!' : 'Scan Finished') }}
+                    </span>
+                    <span class="dock-pct font-mono">{{ scanProgress.progress_percent }}%</span>
+                </div>
+                <div class="dock-sub-row">
+                    <span class="dock-sub text-truncate">{{ scanProgress.current_site || 'Processing' }} • {{ scanProgress.total_products }} items ({{ scanProgress.elapsed_seconds.toFixed(0) }}s)</span>
+                </div>
+            </div>
+            <div class="dock-actions" @click.stop>
+                <button class="dock-btn" @click="maximizeScanModal" title="Expand Progress Details">
+                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                </button>
+                <button class="dock-btn" @click="closeScanModal" title="Close Dock">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
         </div>
 

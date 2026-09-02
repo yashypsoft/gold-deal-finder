@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import json
 import re
+import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -363,6 +364,11 @@ async def root() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+async def favicon() -> FileResponse:
+    return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+
+
 @app.get("/api/v1/historical/scans", response_model=List[ScanHistoryResponse])
 async def get_scan_history(
     limit: int = Query(30, ge=1, le=100, description="Number of scans to return"),
@@ -538,57 +544,202 @@ async def get_scan_timeline(days: int = Query(30, ge=1, le=365)):
     return response
 
 
-async def _trigger_scan(background_tasks: BackgroundTasks) -> Dict[str, Any]:
-    global last_scan_time
-    now = datetime.utcnow()
+class ScanProgressManager:
+    def __init__(self):
+        self._lock = threading.RLock()
+        self.status = "idle"  # idle | running | completed | error
+        self.scan_id = ""
+        self.started_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
+        self.total_products = 0
+        self.current_site = ""
+        self.error_message: Optional[str] = None
+        self.sites = self._init_sites()
+        self.logs: List[Dict[str, Any]] = []
+        self._runner_thread: Optional[threading.Thread] = None
 
-    # async with scan_lock:
-    #     if SCAN_COOLDOWN and last_scan_time and (now - last_scan_time) < SCAN_COOLDOWN:
-    #         remaining = int((SCAN_COOLDOWN - (now - last_scan_time)).total_seconds())
-    #         raise HTTPException(
-    #             status_code=429,
-    #             detail=error_detail(
-    #                 "scan_cooldown",
-    #                 f"Scan recently triggered. Try again in {max(1, remaining // 60)} minute(s).",
-    #                 retry_after_seconds=remaining,
-    #             ),
-    #         )
-    #     last_scan_time = now
+    def _init_sites(self) -> Dict[str, Dict[str, Any]]:
+        return {
+            "ajio": {"key": "ajio", "name": "AJIO", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "myntra": {"key": "myntra", "name": "Myntra", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "candere": {"key": "candere", "name": "Candere / Kalyan", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "bhima": {"key": "bhima", "name": "Bhima Gold", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "tanishq": {"key": "tanishq", "name": "Tanishq", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "mmtc": {"key": "mmtc", "name": "MMTC-PAMP", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "josalukkas": {"key": "josalukkas", "name": "Jos Alukkas", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "joyalukkas": {"key": "joyalukkas", "name": "Joyalukkas", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+            "malabar": {"key": "malabar", "name": "Malabar Gold", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
+        }
 
-    try:
-        products = await asyncio.to_thread(scraper.scrape_all)
-    except Exception as exc:
-        async with scan_lock:
-            last_scan_time = None
-        raise HTTPException(
-            status_code=500,
-            detail=error_detail("scan_failed", f"Scan failed: {exc}"),
-        ) from exc
+    def on_progress(self, site_key: str, status: str, count: Optional[int], message: Optional[str]):
+        with self._lock:
+            if site_key in self.sites:
+                site = self.sites[site_key]
+                site["status"] = status
+                if count is not None:
+                    site["count"] = count
+                if message:
+                    site["message"] = message
 
-    timestamp = now.strftime("%Y%m%d_%H%M%S")
-    filename = DATA_DIR / f"scan_results_{timestamp}.json"
-    scan_data = {
-        "timestamp": now.isoformat(),
-        "total_products": len(products),
-        "products": products,
-    }
-    background_tasks.add_task(save_results, filename, scan_data)
-    clear_response_cache()
+            if status == "running":
+                self.current_site = self.sites.get(site_key, {}).get("name", site_key)
+                log_type = "info"
+            elif status == "completed":
+                log_type = "success"
+            elif status == "error":
+                log_type = "error"
+            else:
+                log_type = "info"
 
-    return {
-        "success": True,
-        "message": f"Found {len(products)} gold products",
-        "scan_id": timestamp,
-        "total_count": len(products),
-        "timestamp": now.isoformat(),
-        "cooldown_minutes": SCAN_COOLDOWN_MINUTES,
-    }
+            # Recalculate total products
+            self.total_products = sum(s.get("count", 0) for s in self.sites.values())
+            self.logs.append({
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "site": self.sites.get(site_key, {}).get("name", site_key),
+                "type": log_type,
+                "message": message or f"{site_key}: {status}"
+            })
+            if len(self.logs) > 100:
+                self.logs.pop(0)
+
+    def _to_dict_unlocked(self) -> Dict[str, Any]:
+        now = datetime.utcnow()
+        if self.started_at:
+            if self.status == "running":
+                elapsed = max(0.0, round((now - self.started_at).total_seconds(), 1))
+            elif self.completed_at:
+                elapsed = max(0.0, round((self.completed_at - self.started_at).total_seconds(), 1))
+            else:
+                elapsed = 0.0
+        else:
+            elapsed = 0.0
+
+        total_sites = len(self.sites)
+        finished_sites = sum(1 for s in self.sites.values() if s["status"] in ("completed", "error"))
+        running_sites = sum(1 for s in self.sites.values() if s["status"] == "running")
+        
+        if self.status == "completed":
+            progress_pct = 100
+        elif self.status == "running":
+            progress_pct = min(95, max(5, int((finished_sites / total_sites) * 90) + (5 if running_sites > 0 else 0)))
+        else:
+            progress_pct = 0 if self.status == "idle" else 100
+
+        return {
+            "status": self.status,
+            "is_running": self.status == "running",
+            "scan_id": self.scan_id,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "elapsed_seconds": elapsed,
+            "progress_percent": progress_pct,
+            "total_products": self.total_products,
+            "current_site": self.current_site,
+            "error_message": self.error_message,
+            "sites": list(self.sites.values()),
+            "logs": list(self.logs[-40:]),
+        }
+
+    def start_scan(self) -> Dict[str, Any]:
+        with self._lock:
+            if self.status == "running":
+                return self._to_dict_unlocked()
+
+            now = datetime.utcnow()
+            self.scan_id = now.strftime("%Y%m%d_%H%M%S")
+            self.status = "running"
+            self.started_at = now
+            self.completed_at = None
+            self.total_products = 0
+            self.error_message = None
+            self.current_site = "Initializing scrapers..."
+            self.sites = self._init_sites()
+            self.logs = [{
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "site": "System",
+                "type": "info",
+                "message": f"Scan #{self.scan_id} initiated across 9 stores..."
+            }]
+            snapshot = self._to_dict_unlocked()
+
+        def _background_worker():
+            try:
+                products = scraper.scrape_all(progress_callback=self.on_progress)
+                
+                filename = DATA_DIR / f"scan_results_{self.scan_id}.json"
+                scan_data = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "total_products": len(products),
+                    "products": products,
+                }
+                save_results(filename, scan_data)
+                latest_filename = DATA_DIR / "latest_scan.json"
+                save_results(latest_filename, scan_data)
+                clear_response_cache()
+
+                with self._lock:
+                    self.status = "completed"
+                    self.completed_at = datetime.utcnow()
+                    self.total_products = len(products)
+                    self.current_site = "Completed"
+                    self.logs.append({
+                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "site": "System",
+                        "type": "success",
+                        "message": f"Scan completed! Saved {len(products)} products."
+                    })
+            except Exception as exc:
+                print(f"Scan background runner error: {exc}")
+                with self._lock:
+                    self.status = "error"
+                    self.error_message = str(exc)
+                    self.completed_at = datetime.utcnow()
+                    self.logs.append({
+                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "site": "System",
+                        "type": "error",
+                        "message": f"Scan failed: {exc}"
+                    })
+
+        self._runner_thread = threading.Thread(target=_background_worker, daemon=True)
+        self._runner_thread.start()
+        return snapshot
+
+    def to_dict(self) -> Dict[str, Any]:
+        with self._lock:
+            return self._to_dict_unlocked()
+
+
+scan_manager = ScanProgressManager()
 
 
 @app.post("/api/v1/scan", response_model=Dict[str, Any])
 @app.get("/api/v1/scan", response_model=Dict[str, Any])
-async def scan_products(background_tasks: BackgroundTasks):
-    return await _trigger_scan(background_tasks)
+async def scan_products():
+    """Trigger an asynchronous background scan session"""
+    state = scan_manager.start_scan()
+    return {
+        "success": True,
+        "message": "Scan started in background" if state["is_running"] else "Scan already in progress",
+        "scan_id": state["scan_id"],
+        "status": state["status"],
+        "progress": state,
+    }
+
+
+@app.get("/api/v1/scan/status", response_model=Dict[str, Any])
+async def get_scan_status():
+    """Get live progress details of current or latest scan"""
+    return scan_manager.to_dict()
+
+
+@app.post("/api/v1/scan/cancel", response_model=Dict[str, Any])
+async def cancel_scan():
+    """Mark running scan as idle if stuck"""
+    with scan_manager._lock:
+        scan_manager.status = "idle"
+        scan_manager.current_site = "Cancelled"
+    return {"success": True, "message": "Scan status reset to idle"}
 
 
 @app.get("/api/v1/spot-price")

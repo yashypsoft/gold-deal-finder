@@ -168,6 +168,24 @@
             showFavoritesModal: false,
             selectedProduct: null,
 
+            scanProgress: {
+                active: false,
+                minimized: false,
+                is_running: false,
+                status: 'idle',
+                scan_id: '',
+                started_at: null,
+                completed_at: null,
+                elapsed_seconds: 0,
+                progress_percent: 0,
+                total_products: 0,
+                current_site: '',
+                error_message: null,
+                sites: [],
+                logs: [],
+                pollTimer: null
+            },
+
             selectedScanId: null,
             selectedScanTimestamp: null,
             selectedScanIsLatest: true,
@@ -790,6 +808,7 @@
             this.initKeyboardShortcuts();
             this.boot();
             this.setupAutoRefresh();
+            this.checkInitialScanStatus();
             this.countdownInterval = setInterval(() => {
                 this.countdownNow = Date.now();
             }, 1000);
@@ -801,6 +820,9 @@
             this.destroyCharts();
             if (this.countdownInterval) {
                 clearInterval(this.countdownInterval);
+            }
+            if (this.scanProgress.pollTimer) {
+                clearInterval(this.scanProgress.pollTimer);
             }
         },
 
@@ -1105,17 +1127,123 @@
             },
 
             async startNewScan() {
+                this.scanProgress.active = true;
+                this.scanProgress.minimized = false;
+                this.scanProgress.status = 'running';
+                this.scanProgress.is_running = true;
+                this.scanProgress.progress_percent = 5;
+                this.scanProgress.current_site = 'Initiating scan...';
                 this.scanning = true;
+
                 try {
-                    const response = await axios.get('/api/v1/scan');
-                    this.showScanModal = false;
-                    this.showNotification('success', response.data?.message || 'Scan completed successfully.');
-                    await this.refreshDashboardData({ preserveSelection: false, clearCache: true });
-                    await this.loadLatestScan({ silent: true });
+                    const response = await axios.post('/api/v1/scan');
+                    if (response.data && response.data.progress) {
+                        this.updateScanProgressState(response.data.progress);
+                    }
+                    this.startScanPolling();
                 } catch (error) {
-                    this.showNotification('error', this.getErrorMessage(error, 'Scan failed.'));
-                } finally {
+                    console.error('Scan trigger error', error);
+                    this.startScanPolling();
+                }
+            },
+
+            startScanPolling() {
+                if (this.scanProgress.pollTimer) {
+                    clearInterval(this.scanProgress.pollTimer);
+                }
+                this.scanProgress.pollTimer = setInterval(async () => {
+                    await this.pollScanStatus();
+                }, 850);
+            },
+
+            async pollScanStatus() {
+                try {
+                    const response = await axios.get('/api/v1/scan/status');
+                    const data = response.data;
+                    const prevStatus = this.scanProgress.status;
+                    this.updateScanProgressState(data);
+
+                    if (data.status === 'completed' && prevStatus === 'running') {
+                        clearInterval(this.scanProgress.pollTimer);
+                        this.scanProgress.pollTimer = null;
+                        this.scanning = false;
+                        this.showNotification('success', `Scan complete! Found ${data.total_products || 0} products.`);
+                        await this.refreshDashboardData({ preserveSelection: false, clearCache: true });
+                        await this.loadLatestScan({ silent: true });
+                    } else if (data.status === 'error' && prevStatus === 'running') {
+                        clearInterval(this.scanProgress.pollTimer);
+                        this.scanProgress.pollTimer = null;
+                        this.scanning = false;
+                        this.showNotification('error', `Scan error: ${data.error_message || 'Scan failed'}`);
+                    }
+                } catch (err) {
+                    console.error('Polling status error', err);
+                }
+            },
+
+            updateScanProgressState(data) {
+                if (!data) return;
+                this.scanProgress.status = data.status || 'idle';
+                this.scanProgress.is_running = Boolean(data.is_running);
+                this.scanProgress.scan_id = data.scan_id || this.scanProgress.scan_id;
+                this.scanProgress.started_at = data.started_at;
+                this.scanProgress.completed_at = data.completed_at;
+                this.scanProgress.elapsed_seconds = data.elapsed_seconds || 0;
+                this.scanProgress.progress_percent = data.progress_percent || 0;
+                this.scanProgress.total_products = data.total_products || 0;
+                this.scanProgress.current_site = data.current_site || '';
+                this.scanProgress.error_message = data.error_message;
+                this.scanProgress.sites = safeArray(data.sites);
+                this.scanProgress.logs = safeArray(data.logs);
+                this.scanning = (data.status === 'running');
+            },
+
+            minimizeScanModal() {
+                this.scanProgress.minimized = true;
+                this.showNotification('info', 'Scan minimized. Running in background.');
+            },
+
+            maximizeScanModal() {
+                this.scanProgress.minimized = false;
+                this.scanProgress.active = true;
+            },
+
+            closeScanModal() {
+                if (this.scanProgress.is_running) {
+                    this.minimizeScanModal();
+                } else {
+                    this.scanProgress.active = false;
+                    this.scanProgress.minimized = false;
+                }
+            },
+
+            async cancelActiveScan() {
+                try {
+                    await axios.post('/api/v1/scan/cancel');
+                    if (this.scanProgress.pollTimer) {
+                        clearInterval(this.scanProgress.pollTimer);
+                        this.scanProgress.pollTimer = null;
+                    }
+                    this.scanProgress.status = 'idle';
+                    this.scanProgress.is_running = false;
                     this.scanning = false;
+                    this.showNotification('info', 'Scan reset.');
+                } catch (e) {
+                    console.error('Cancel scan error', e);
+                }
+            },
+
+            async checkInitialScanStatus() {
+                try {
+                    const response = await axios.get('/api/v1/scan/status');
+                    if (response.data && response.data.is_running) {
+                        this.updateScanProgressState(response.data);
+                        this.scanProgress.active = true;
+                        this.scanProgress.minimized = true; // start minimized if already running
+                        this.startScanPolling();
+                    }
+                } catch (e) {
+                    // silently ignore on boot
                 }
             },
 

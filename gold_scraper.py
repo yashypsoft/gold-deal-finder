@@ -8,6 +8,7 @@ import urllib.parse
 from typing import Dict, List, Optional, Tuple, Any
 from config import AJIO_API_URL, SEARCH_PARAMS, REQUEST_DELAY
 from price_calculator import GoldPriceCalculator
+import math
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -332,9 +333,21 @@ class GoldScraper:
                     continue
     
         if all_weights:
-            # If we have multiple different weights, return the first one as it is the total weight
+            # If purity wasn't explicitly mentioned in the title, check product context
+            if not purity:
+                if any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
+                    purity = '24K'
+                elif 'gold' in title_lower:
+                    purity = '22K'
+            # Return first weight as total weight
             return purity, all_weights[0]
-    
+
+        if not purity:
+            if any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
+                purity = '24K'
+            elif 'gold' in title_lower:
+                purity = '22K'
+
         return purity, None
     
     
@@ -534,62 +547,112 @@ class GoldScraper:
             return None
     
     def scrape_myntra(self) -> List[Dict]:
-        print("🔄 Scraping Myntra...")
+        print("🔄 Scraping Myntra (Browser-level TLS)...")
         products = []
+        seen_ids = set()
 
-        def fetch_page(page: int):
-            session, base_headers = self.create_myntra_session()
+        browser_headers = {
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'accept-language': 'en-US,en;q=0.9',
+            'referer': 'https://www.myntra.com/',
+            'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        }
 
-            params = {
-                "rows": 50,
-                "o": (49 * (page - 1)) + 1,
-                "pincode": "384315"
-            }
-
-            api_headers = {
-                "User-Agent": base_headers["User-Agent"],
-                # "Accept": "application/json",
-                "referer": "https://www.myntra.com/gold-coin",
-                "x-meta-app": "channel=web",
-                "x-myntraweb": "Yes",
-                "x-requested-with": "browser"
-            }
-
+        def extract_products_from_myntra_html(html_text: str) -> Tuple[List[Dict], int]:
+            start_tag = 'window.__myx = '
+            idx = html_text.find(start_tag)
+            if idx == -1:
+                return [], 0
+            content = html_text[idx + len(start_tag):]
+            end_idx = content.find('</script>')
+            if end_idx == -1:
+                return [], 0
             try:
-                r = session.get(
-                    "https://www.myntra.com/gateway/v4/search/gold-coin",
-                    params=params,
-                    headers=api_headers,
-                    timeout=20
-                )
-
-                if r.status_code != 200:
-                    return []
-                # print(f"Page {page} response:")
-                # print(r.status_code)
-                # print(r.text)  # Print first 200 characters of response text
-                data = r.json()
-                page_products = []
-
-                for p in data.get("products", []):
-                    parsed = self._parse_myntra_product(p)
-                    if parsed:
-                        page_products.append(parsed)
-
-                print(f"Page {page}: {len(page_products)} valid")
-                return page_products
-
+                data = json.loads(content[:end_idx].rstrip().rstrip(';'))
+                search_res = data.get('searchData', {}).get('results', {})
+                return search_res.get('products', []), search_res.get('totalCount', 0)
             except Exception as e:
-                print(f"Page {page} error: {e}")
+                print(f"Myntra JSON decode error: {e}")
+                return [], 0
+
+        # Fetch page 1
+        raw_products = []
+        total_count = 0
+        try:
+            from curl_cffi import requests as cffi_requests
+            session = cffi_requests.Session(impersonate='chrome120')
+            r1 = session.get('https://www.myntra.com/gold-coin?p=1', headers=browser_headers, timeout=15)
+            if r1.status_code == 200:
+                p1_items, total_count = extract_products_from_myntra_html(r1.text)
+                raw_products.extend(p1_items)
+            else:
+                print(f"Myntra page 1 status: {r1.status_code}")
+        except Exception as e:
+            print(f"Myntra cffi page 1 error: {e}")
+
+        # Fetch remaining pages concurrently
+        if total_count > 0 and len(raw_products) > 0:
+            total_pages = min(12, math.ceil(total_count / 40))
+            def fetch_myntra_page(page_num: int):
+                try:
+                    from curl_cffi import requests as cffi_requests
+                    s = cffi_requests.Session(impersonate='chrome120')
+                    r = s.get(f'https://www.myntra.com/gold-coin?p={page_num}', headers=browser_headers, timeout=15)
+                    if r.status_code == 200:
+                        items, _ = extract_products_from_myntra_html(r.text)
+                        return items
+                except Exception as ex:
+                    print(f"Myntra page {page_num} error: {ex}")
                 return []
 
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            futures = [ex.submit(fetch_page, p) for p in range(1, 13)]
+            if total_pages > 1:
+                with ThreadPoolExecutor(max_workers=5) as ex:
+                    futures = [ex.submit(fetch_myntra_page, p) for p in range(2, total_pages + 1)]
+                    for f in as_completed(futures):
+                        raw_products.extend(f.result())
 
-            for f in as_completed(futures):
-                products.extend(f.result())
+        # Fallback to Playwright if curl_cffi returned nothing
+        if not raw_products:
+            print("⚠️ Attempting Playwright fallback for Myntra...")
+            try:
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
+                    )
+                    context = browser.new_context(
+                        user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                    )
+                    page = context.new_page()
+                    page.goto('https://www.myntra.com/gold-coin', wait_until='domcontentloaded', timeout=20000)
+                    html_content = page.content()
+                    pw_items, _ = extract_products_from_myntra_html(html_content)
+                    raw_products.extend(pw_items)
+                    browser.close()
+            except Exception as pw_err:
+                print(f"Playwright Myntra fallback error: {pw_err}")
 
-        print(f"✅ Myntra total: {len(products)}")
+        # Parse and deduplicate
+        for p in raw_products:
+            pid = p.get('productId') or p.get('landingPageUrl')
+            if pid and pid in seen_ids:
+                continue
+            if pid:
+                seen_ids.add(pid)
+            parsed = self._parse_myntra_product(p)
+            if parsed:
+                products.append(parsed)
+
+        print(f"✅ Myntra total: {len(products)} products parsed from {len(raw_products)} raw items")
         return products
     
     def _extract_myntra_price(self, price_data: Any) -> Tuple[float, float]:
@@ -598,48 +661,32 @@ class GoldScraper:
         Returns: (selling_price, original_price)
         """
         try:
-            # If price_data is a dictionary
             if isinstance(price_data, dict):
-                selling_price = price_data.get('discountedPrice', 0)
+                selling_price = price_data.get('discountedPrice') or price_data.get('sellingPrice') or price_data.get('price', 0)
                 original_price = price_data.get('mrp', selling_price)
-                return float(selling_price), float(original_price)
-            
-            # If price_data is a single integer/float
+                return float(selling_price or 0), float(original_price or 0)
             elif isinstance(price_data, (int, float)):
                 return float(price_data), float(price_data)
-            
-            # If price_data is a string
             elif isinstance(price_data, str):
                 try:
                     price = float(price_data)
                     return price, price
                 except:
                     return 0, 0
-            
             else:
                 return 0, 0
-                
         except Exception as e:
             print(f"Error extracting Myntra price: {e}")
             return 0, 0
     
     def _parse_myntra_product(self, product: Dict) -> Optional[Dict]:
-        """Parse Myntra product data with improved price handling"""
+        """Parse Myntra product data with improved price and brand handling"""
         try:
-            title = product.get('productName', '')
-            
-            # Skip if no title
+            title = product.get('productName', '') or product.get('product', '')
             if not title:
-                print('Skipping Myntra price product    :', title)
                 return None
             
-            # Skip non-gold products
-            # if 'gold' not in title.lower():
-            #     print('Skipping not gold product    :', title)
-            #     return None
-        
             if 'silver' in title.lower():
-                # print('Skipping silver  product    :', title)
                 return None
             
             # Skip out of stock items
@@ -648,28 +695,21 @@ class GoldScraper:
             
             # Extract purity and weight
             purity, weight = self.extract_purity_and_weight(title)
-            
-            if not purity or not weight:
-                # print(product);
-                print('Myntra>Skipping invalid purity/weight product    :', title)
-                return None
-            
-            # Skip very small items
-            if weight < 0.3:
-                print('Skipping very small weight < 0.3 product    :', title)
+            if not purity or not weight or weight < 0.3:
                 return None
             
             # Determine product type from title
             product_type = self.determine_product_type(title)
             is_jewellery = (product_type == 'jewellery')
             
-            # Extract price - handle different formats
-            price_data = product.get('price')
-            selling_price, original_price = self._extract_myntra_price(price_data)
-            
-            # Skip if price is too low
+            # Extract price
+            selling_price = float(product.get('price', 0) or 0)
+            original_price = float(product.get('mrp', 0) or selling_price)
             if selling_price < 1000:
-                print('Skipping very small price <1000 product    :', title)
+                price_data = product.get('price')
+                selling_price, original_price = self._extract_myntra_price(price_data)
+            
+            if selling_price < 1000:
                 return None
             
             # Calculate expected price
@@ -677,43 +717,25 @@ class GoldScraper:
                 weight, purity, is_jewellery
             )
             expected_price = expected_price_info['total_expected']
-            # print(expected_price,weight, purity, is_jewellery)
-            # print(expected_price_info)
-            # return {}
-            # Calculate discount
             discount_percent = self.price_calculator.calculate_discount_percentage(
                 selling_price, expected_price
             )
-            
-            # Calculate price per gram
             price_per_gram = selling_price / weight
             
-            # Get other product details
+            # URL and image
             landing_url = product.get('landingPageUrl', '')
             if landing_url and not landing_url.startswith('http'):
-                landing_url = f"https://www.myntra.com/{landing_url}"
+                landing_url = f"https://www.myntra.com/{landing_url.lstrip('/')}"
+            elif not landing_url and product.get('productId'):
+                landing_url = f"https://www.myntra.com/{product.get('productId')}"
             
-            # print({
-            #     'source': 'Myntra',
-            #     'title': title,
-            #     'weight_grams': weight,
-            #     'purity': purity,
-            #     'product_type': product_type,
-            #     'is_jewellery': is_jewellery,
-            #     'selling_price': selling_price,
-            #     'original_price': original_price,
-            #     'expected_price': round(expected_price, 2),
-            #     'discount_percent': discount_percent,
-            #     'price_per_gram': round(price_per_gram, 2),
-            #     'url': landing_url,
-            #     'image_url': product.get('searchImage', ''),
-            #     'brand': product.get('brandName', 'Unknown'),
-            #     'spot_price': expected_price_info['spot_price_per_gram'],
-            #     'making_charges_percent': expected_price_info['making_charges_percent'],
-            #     'gst_percent': expected_price_info['gst_percent'],
-            #     'timestamp': datetime.now().isoformat()
-            # })
-
+            img_url = product.get('searchImage', '')
+            if not img_url and product.get('images'):
+                img_url = product.get('images', [{}])[0].get('src', '')
+            
+            # Brand
+            brand = product.get('brand') or product.get('brandName') or 'Unknown'
+            
             return {
                 'source': 'Myntra',
                 'title': title,
@@ -727,8 +749,8 @@ class GoldScraper:
                 'discount_percent': discount_percent,
                 'price_per_gram': round(price_per_gram, 2),
                 'url': landing_url,
-                'image_url': product.get('searchImage', ''),
-                'brand': product.get('brandName', 'Unknown'),
+                'image_url': img_url,
+                'brand': brand,
                 'spot_price': expected_price_info['spot_price_per_gram'],
                 'making_charges_percent': expected_price_info['making_charges_percent'],
                 'gst_percent': expected_price_info['gst_percent'],
@@ -737,8 +759,6 @@ class GoldScraper:
             
         except Exception as e:
             print(f"Error parsing Myntra product '{product.get('productName', 'Unknown')}': {e}")
-            import traceback
-            traceback.print_exc()
             return None
 
     def scrape_candere(self) -> List[Dict]:
@@ -1615,31 +1635,53 @@ class GoldScraper:
         print(f"✅ Malabar Gold total: {len(products)}")
         return products
 
-    def scrape_all(self) -> List[Dict]:
+    def scrape_all(self, progress_callback=None) -> List[Dict]:
+        """
+        Scrapes all sources concurrently with live progress reporting.
+        progress_callback: Callable[[site_key, status, count, message], None]
+        """
+        tasks = [
+            ('ajio', 'AJIO', self.scrape_ajio),
+            ('myntra', 'Myntra', self.scrape_myntra),
+            ('candere', 'Candere / Kalyan', self.scrape_candere),
+            ('bhima', 'Bhima Gold', self.scrape_bhima),
+            ('tanishq', 'Tanishq', self.scrape_tanishq),
+            ('mmtc', 'MMTC-PAMP', self.scrape_mmtc),
+            ('josalukkas', 'Jos Alukkas', self.scrape_josalukkas),
+            ('joyalukkas', 'Joyalukkas', self.scrape_joyalukkas),
+            ('malabar', 'Malabar Gold', self.scrape_malabar),
+        ]
+
+        all_products = []
+
+        def run_scraper(key: str, name: str, scraper_fn):
+            t_start = time.time()
+            if progress_callback:
+                progress_callback(key, 'running', 0, f"Scraping {name}...")
+            try:
+                res = scraper_fn() or []
+                duration = round(time.time() - t_start, 1)
+                if progress_callback:
+                    progress_callback(key, 'completed', len(res), f"Found {len(res)} items from {name} ({duration}s)")
+                return res
+            except Exception as exc:
+                duration = round(time.time() - t_start, 1)
+                print(f"Error scraping {name}: {exc}")
+                if progress_callback:
+                    progress_callback(key, 'error', 0, f"Failed scraping {name}: {exc}")
+                return []
+
         with ThreadPoolExecutor(max_workers=18) as ex:
-            f1 = ex.submit(self.scrape_ajio)
-            f2 = ex.submit(self.scrape_myntra)
-            f3 = ex.submit(self.scrape_candere)
-            f4 = ex.submit(self.scrape_bhima)
-            f5 = ex.submit(self.scrape_tanishq)
-            f6 = ex.submit(self.scrape_mmtc)
-            f7 = ex.submit(self.scrape_josalukkas)
-            f8 = ex.submit(self.scrape_joyalukkas)
-            f9 = ex.submit(self.scrape_malabar)
+            futures = {ex.submit(run_scraper, key, name, fn): (key, name) for key, name, fn in tasks}
+            for f in as_completed(futures):
+                key, name = futures[f]
+                try:
+                    site_prods = f.result()
+                    all_products.extend(site_prods)
+                except Exception as e:
+                    print(f"Unhandled error in future {name}: {e}")
 
-            ajio_products = f1.result()
-            myntra_products = f2.result()
-            candere_products = f3.result()
-            bhima_products = f4.result()
-            tanishq_products = f5.result()
-            mmtc_products = f6.result()
-            josalukkas_products = f7.result()
-            joyalukkas_products = f8.result()
-            malabar_products = f9.result()
-
-        all_products = ajio_products + myntra_products + candere_products + bhima_products + tanishq_products + mmtc_products + josalukkas_products + joyalukkas_products + malabar_products
-        print(f"\n📊 Total products: {len(all_products)}")
-
+        print(f"\n📊 Total products aggregated across all sources: {len(all_products)}")
         return all_products
 
     def scrape_all_with_cache(self, force_refresh=False):

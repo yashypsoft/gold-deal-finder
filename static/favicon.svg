@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="goldRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE79A"/>
+      <stop offset="25%" stop-color="#D4AF37"/>
+      <stop offset="50%" stop-color="#996515"/>
+      <stop offset="75%" stop-color="#F5D061"/>
+      <stop offset="100%" stop-color="#8A5A00"/>
+    </linearGradient>
+    <radialGradient id="goldFace" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#FFF3B0"/>
+      <stop offset="40%" stop-color="#E5C158"/>
+      <stop offset="80%" stop-color="#C59B27"/>
+      <stop offset="100%" stop-color="#8F6B10"/>
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Shadow & Base -->
+  <circle cx="32" cy="32" r="30" fill="url(#goldRim)" filter="url(#glow)"/>
+  
+  <!-- Inner Coin Surface -->
+  <circle cx="32" cy="32" r="25" fill="url(#goldFace)"/>
+  <circle cx="32" cy="32" r="23.5" fill="none" stroke="#FFEAA7" stroke-width="0.75" stroke-dasharray="2,1.5"/>
+
+  <!-- Center Gold Ingot / Coin Symbol -->
+  <!-- Stylized Rupee / 999 Bullion Icon -->
+  <path d="M23 20h18M23 26h14M28 20v24M36 26c0 6-8 7-8 7l8 11" fill="none" stroke="#684704" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 20h18M23 26h14M28 20v24M36 26c0 6-8 7-8 7l8 11" fill="none" stroke="#FFF7D6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Sparkle Accent -->
+  <path d="M45 15l1.5 3.5 3.5 1.5-3.5 1.5-1.5 3.5-1.5-3.5-3.5-1.5 3.5-1.5z" fill="#FFFBE6" opacity="0.9"/>
+</svg>
