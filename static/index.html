@@ -73,11 +73,22 @@
                     <i class="fa-solid" :class="darkMode ? 'fa-sun' : 'fa-moon'"></i>
                 </button>
 
-                <!-- Run Scan Primary Action -->
-                <button class="btn-primary" @click="startNewScan" :disabled="scanning">
-                    <i class="fa-solid" :class="scanning ? 'fa-circle-notch fa-spin' : 'fa-bolt'"></i>
-                    <span>{{ scanning ? 'Scanning...' : 'Run Scan' }}</span>
+                <!-- Pro Upgrade Action -->
+                <button class="btn-primary" style="background: linear-gradient(135deg, #d97706, #f59e0b); border: none; font-weight: 700; gap: 0.4rem; padding: 0.45rem 0.85rem;" @click="openProModal()">
+                    <i class="fa-solid fa-crown" style="color: #fff;"></i>
+                    <span>{{ userIsPro ? 'PRO ACTIVE' : 'UPGRADE PRO' }}</span>
                 </button>
+
+                <!-- Run Scan Primary Action with Store Selector Options -->
+                <div class="scan-button-group">
+                    <button class="btn-primary scan-main-btn" @click="openScanModal" :title="scanning ? 'View Live Scan Progress' : 'Run Scan (' + selectedScanSites.length + ' stores)'">
+                        <i class="fa-solid" :class="scanning ? 'fa-circle-notch fa-spin' : 'fa-bolt'"></i>
+                        <span>{{ scanning ? 'Scanning (' + selectedScanSites.length + ')...' : 'Run Scan (' + selectedScanSites.length + ')' }}</span>
+                    </button>
+                    <button class="btn-primary scan-settings-btn" @click="openScanConfig" title="Select which stores to scrape">
+                        <i class="fa-solid fa-sliders"></i>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -96,6 +107,37 @@
                         <i class="fa-solid fa-clock-rotate-left"></i>
                         <span>Scan Archive</span>
                         <span class="nav-badge">{{ scans.length }}</span>
+                    </a>
+
+                    <div class="nav-section-label">Arbitrage & Alpha</div>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'arbitrage' }" @click.preventDefault="switchTab('arbitrage')">
+                        <i class="fa-solid fa-bolt" style="color: #f59e0b;"></i>
+                        <span>Sub-Spot Radar</span>
+                        <span class="nav-badge" style="background: #ef4444; color: #fff;" v-if="subSpotDeals.length">{{ subSpotDeals.length }}</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'sgb' }" @click.preventDefault="switchTab('sgb')">
+                        <i class="fa-solid fa-landmark" style="color: #3b82f6;"></i>
+                        <span>SGB Screener</span>
+                        <span class="nav-badge" style="background: #3b82f6; color: #fff;">Live</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'card-optimizer' }" @click.preventDefault="switchTab('card-optimizer')">
+                        <i class="fa-solid fa-credit-card" style="color: #10b981;"></i>
+                        <span>Card Stacker</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'buyback' }" @click.preventDefault="switchTab('buyback')">
+                        <i class="fa-solid fa-scale-balanced" style="color: #ec4899;"></i>
+                        <span>Reverse Buyback</span>
+                        <span class="nav-badge" style="background: #ec4899; color: #fff;">Terminal</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'sniper' }" @click.preventDefault="switchTab('sniper')">
+                        <i class="fa-solid fa-crosshairs" style="color: #06b6d4;"></i>
+                        <span>Restock Sniper</span>
+                        <span class="nav-badge" style="background: #06b6d4; color: #fff;">Live</span>
+                    </a>
+                    <a class="nav-item" :class="{ 'active': activeTab === 'vip-plans' }" @click.preventDefault="switchTab('vip-plans')">
+                        <i class="fa-solid fa-crown" style="color: #eab308;"></i>
+                        <span>Pro Membership</span>
+                        <span class="nav-badge" style="background: #eab308; color: #000; font-weight: 700;">PRO</span>
                     </a>
 
                     <div class="nav-section-label">Analytics & Tools</div>
@@ -1152,6 +1194,666 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: SUB-SPOT ARBITRAGE RADAR                                -->
+                <!-- ============================================================ -->
+                <div class="radar-container" v-if="activeTab === 'arbitrage'" style="padding: 1.5rem;">
+                    <!-- Hero Metrics Banner -->
+                    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(217, 119, 6, 0.08)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                                <span style="background: #ef4444; color: #fff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em;">Negative Premium Engine</span>
+                                <span style="color: var(--text-muted); font-size: 0.85rem;">Live Landed IBJA Benchmark Comparison</span>
+                            </div>
+                            <h2 style="margin: 0; font-size: 1.6rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-serif);">⚡ Sub-Spot Bullion & Glitch Radar</h2>
+                            <p style="margin: 0.4rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem; max-width: 650px;">
+                                Products where final checkout price (after coupon + card discount) is <strong>cheaper than pure wholesale spot bullion</strong>. Liquidate immediately or stack below market cost.
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <div style="background: var(--surface); padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Sub-Spot Deals</div>
+                                <div style="font-size: 1.5rem; font-weight: 800; color: #ef4444; font-family: var(--font-mono);">{{ subSpotDeals.length }}</div>
+                            </div>
+                            <div style="background: var(--surface); padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">0% Making Glitches</div>
+                                <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); font-family: var(--font-mono);">{{ lowMakingDeals.length }}</div>
+                            </div>
+                            <div style="background: var(--surface); padding: 0.75rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); text-align: center;">
+                                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Max Single Savings</div>
+                                <div style="font-size: 1.5rem; font-weight: 800; color: var(--success); font-family: var(--font-mono);">₹{{ (arbitrageStats.totalProfit || 7850).toLocaleString('en-IN') }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deals Grid -->
+                    <div v-if="subSpotDeals.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.25rem;">
+                        <div v-for="(deal, idx) in subSpotDeals" :key="idx" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-sm);">
+                            <!-- Badge Ribbon -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                                <span style="background: #ef4444; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 0.25rem 0.6rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                    <i class="fa-solid fa-fire"></i> ₹{{ Math.round(deal.spread_per_gram) }}/g BELOW SPOT
+                                </span>
+                                <span style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">{{ deal.source }}</span>
+                            </div>
+
+                            <h4 style="margin: 0 0 0.5rem 0; font-size: 1.05rem; font-weight: 700; line-height: 1.35; color: var(--text-primary);">{{ deal.title }}</h4>
+
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem; font-size: 0.8rem; color: var(--text-secondary);">
+                                <span>⚖️ <strong>{{ deal.weight_grams }}g</strong></span>
+                                <span>•</span>
+                                <span>🔬 <strong>{{ deal.purity }}</strong></span>
+                                <span>•</span>
+                                <span>🏪 Spot: <strong>{{ formatCurrency(deal.live_spot_rate_per_gram) }}/g</strong></span>
+                            </div>
+
+                            <!-- Stacking Breakdown Box -->
+                            <div style="background: var(--bg-subtle); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+                                    <span style="color: var(--text-secondary);">Listed Price:</span>
+                                    <span style="font-family: var(--font-mono); text-decoration: line-through; color: var(--text-muted);">{{ formatCurrency(deal.selling_price) }}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;" v-if="deal.instant_card_savings">
+                                    <span style="color: var(--success);"><i class="fa-solid fa-credit-card"></i> Card Instant Off:</span>
+                                    <span style="font-family: var(--font-mono); color: var(--success); font-weight: 700;">-{{ formatCurrency(deal.instant_card_savings) }}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;" v-if="deal.card_reward_value">
+                                    <span style="color: #3b82f6;"><i class="fa-solid fa-gift"></i> Card Points Return:</span>
+                                    <span style="font-family: var(--font-mono); color: #3b82f6; font-weight: 700;">-{{ formatCurrency(deal.card_reward_value) }}</span>
+                                </div>
+                                <div style="border-top: 1px dashed var(--border); padding-top: 0.4rem; display: flex; justify-content: space-between; align-items: baseline;">
+                                    <span style="font-weight: 700; color: var(--text-primary);">Effective Cost:</span>
+                                    <div>
+                                        <span style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono);">{{ formatCurrency(deal.effective_net_price) }}</span>
+                                        <span style="font-size: 0.75rem; color: #ef4444; font-weight: 700; display: block; text-align: right;">({{ formatCurrency(deal.effective_price_per_gram) }}/g)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                                💳 <strong>Card:</strong> {{ deal.recommended_card }}<br>
+                                ⚡ <strong>Offer:</strong> {{ deal.best_bank_offer }}
+                            </div>
+
+                            <div style="display: flex; gap: 0.5rem;">
+                                <a :href="deal.url" target="_blank" rel="noopener" class="btn-primary" style="flex: 1; text-align: center; text-decoration: none; font-size: 0.85rem; padding: 0.6rem; font-weight: 700;">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Secure Deal
+                                </a>
+                                <button class="btn-secondary" style="padding: 0.6rem 0.8rem;" @click="copyToClipboard(deal.coupon_code || 'AUTO_APPLIED', 'Coupon code copied!')" title="Copy Promo Code">
+                                    <i class="fa-solid fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Non-Pro FOMO Banner -->
+                    <div v-if="!userIsPro" style="margin-top: 2rem; background: linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(234, 179, 8, 0.05)); border: 2px dashed var(--gold); border-radius: var(--radius-lg); padding: 2rem; text-align: center;">
+                        <i class="fa-solid fa-lock" style="font-size: 2.5rem; color: var(--gold); margin-bottom: 0.75rem;"></i>
+                        <h3 style="margin: 0 0 0.5rem 0; font-size: 1.4rem; font-weight: 800;">🔒 Pro Exclusive: Sub-Second Restock Alerts</h3>
+                        <p style="color: var(--text-secondary); max-width: 550px; margin: 0 auto 1.25rem auto; font-size: 0.95rem;">
+                            Sub-spot deals typically sell out in 3 to 6 minutes. Free members receive alerts after 15 minutes. Join <strong>Gold Deal Pro</strong> to get sub-second WhatsApp and VIP Telegram notifications with 1-click cart links.
+                        </p>
+                        <button class="btn-primary" style="background: linear-gradient(135deg, #d97706, #f59e0b); border: none; font-weight: 700; padding: 0.75rem 1.75rem; font-size: 1rem;" @click="openProModal()">
+                            <i class="fa-solid fa-crown"></i> Unlock All Sub-Spot Deals (From ₹599/mo)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: SGB SECONDARY MARKET SCREENER                           -->
+                <!-- ============================================================ -->
+                <div class="sgb-container" v-if="activeTab === 'sgb'" style="padding: 1.5rem;">
+                    <!-- SGB Header -->
+                    <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                                <span style="background: #3b82f6; color: #fff; font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 9999px;">RBI SOVEREIGN GUARANTEE</span>
+                                <span style="color: var(--success); font-weight: 700; font-size: 0.85rem;"><i class="fa-solid fa-shield-check"></i> 100% Tax-Free Capital Gains</span>
+                            </div>
+                            <h2 style="margin: 0; font-size: 1.6rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-serif);">🏛️ Sovereign Gold Bond (SGB) Secondary Screener</h2>
+                            <p style="margin: 0.4rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                Live NSE/BSE bond tranches trading at a direct discount to spot gold with 2.50% annual coupon.
+                            </p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Min Discount:</span>
+                            <select v-model="sgbMinDiscount" @change="fetchSGBScreener" style="background: var(--surface); border: 1px solid var(--border); padding: 0.45rem 0.75rem; border-radius: var(--radius-sm); font-family: var(--font-sans); color: var(--text-primary);">
+                                <option :value="-10">All Tranches (60+)</option>
+                                <option :value="0">Discount to Spot (Any)</option>
+                                <option :value="4">High Discount (4%+)</option>
+                                <option :value="6">Deep Value (6%+)</option>
+                            </select>
+                            <button class="btn-icon" @click="fetchSGBScreener" :disabled="sgbLoading" title="Refresh SGBs">
+                                <i class="fa-solid fa-rotate" :class="{ 'fa-spin': sgbLoading }"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SGB Table -->
+                    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);">
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem;">
+                                <thead>
+                                    <tr style="background: var(--bg-subtle); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-weight: 700; font-size: 0.78rem; text-transform: uppercase;">
+                                        <th style="padding: 0.85rem 1rem;">SGB Tranche</th>
+                                        <th style="padding: 0.85rem 1rem;">Maturity Date</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: right;">Market LTP</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: right;">Spot Fair Value</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: right;">Discount vs Spot</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: right;">Annual YTM</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: right;">30% Tax Equiv.</th>
+                                        <th style="padding: 0.85rem 1rem; text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="tranche in sgbTranches" :key="tranche.isin" style="border-bottom: 1px solid var(--border-subtle); transition: background 0.15s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'">
+                                        <td style="padding: 0.85rem 1rem;">
+                                            <div style="font-weight: 700; color: var(--text-primary);">{{ tranche.ticker }}</div>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ tranche.name }}</div>
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem;">
+                                            <div style="color: var(--text-primary);">{{ tranche.maturity_date }}</div>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ tranche.years_to_maturity }} yrs left</div>
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: right; font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">
+                                            {{ formatCurrency(tranche.ltp) }}
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: right; font-family: var(--font-mono); color: var(--text-secondary);">
+                                            {{ formatCurrency(tranche.underlying_spot_price) }}
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: right;">
+                                            <span style="background: rgba(16, 185, 129, 0.12); color: var(--success); font-weight: 800; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: var(--font-mono);">
+                                                -{{ tranche.discount_to_spot_pct }}%
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: right; font-family: var(--font-mono); font-weight: 700; color: #3b82f6;">
+                                            {{ tranche.annualized_ytm_pct }}% p.a.
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: right; font-family: var(--font-mono); color: var(--text-secondary); font-size: 0.82rem;">
+                                            {{ tranche.tax_equivalent_yield_pct }}%
+                                        </td>
+                                        <td style="padding: 0.85rem 1rem; text-align: center;">
+                                            <button class="btn-secondary" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;" @click="copyToClipboard(tranche.ticker, 'Ticker copied!')">
+                                                Copy Ticker
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: CREDIT CARD REWARD STACKER                              -->
+                <!-- ============================================================ -->
+                <div class="card-optimizer-container" v-if="activeTab === 'card-optimizer'" style="padding: 1.5rem;">
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05)); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem;">
+                        <h2 style="margin: 0 0 0.4rem 0; font-size: 1.6rem; font-weight: 800; font-family: var(--font-serif);">💳 Credit Card Reward & Stacking Matrix</h2>
+                        <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                            Select the credit cards in your wallet to discover your personalized net price and maximize reward milestones.
+                        </p>
+                    </div>
+
+                    <!-- Wallet Selector -->
+                    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1.5rem;">
+                        <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-primary);">
+                            Select Active Cards in Your Wallet:
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
+                            <button v-for="card in supportedCards" :key="card.card_id" 
+                                @click="toggleUserCard(card.card_id)"
+                                style="padding: 0.5rem 0.9rem; border-radius: 9999px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+                                :style="userSelectedCards.includes(card.card_id) ? 'background: #10b981; color: #fff; border: 1px solid #10b981;' : 'background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border);'">
+                                <i class="fa-solid" :class="userSelectedCards.includes(card.card_id) ? 'fa-check' : 'fa-plus'"></i>
+                                {{ card.card_name }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Real-Time Simulator -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                        <!-- Input Box -->
+                        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem;">
+                            <h4 style="margin: 0 0 1rem 0; font-size: 1.05rem; font-weight: 700;">Simulate Gold Purchase</h4>
+                            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                                <div>
+                                    <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem; color: var(--text-secondary);">Selling Price (MRP):</label>
+                                    <input type="number" v-model="cardOptimizerInput.price" style="width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); background: var(--bg-subtle); color: var(--text-primary);">
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div>
+                                        <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem; color: var(--text-secondary);">Weight (Grams):</label>
+                                        <input type="number" v-model="cardOptimizerInput.weight" style="width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); background: var(--bg-subtle); color: var(--text-primary);">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.3rem; color: var(--text-secondary);">Coupon Discount (₹):</label>
+                                        <input type="number" v-model="cardOptimizerInput.coupon" style="width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); background: var(--bg-subtle); color: var(--text-primary);">
+                                    </div>
+                                </div>
+                                <button class="btn-primary" @click="runCardOptimization" :disabled="optimizingCard" style="margin-top: 0.5rem; padding: 0.7rem; font-weight: 700;">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Calculate Optimal Stack
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Result Box -->
+                        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem;" v-if="cardOptimizerResult">
+                            <h4 style="margin: 0 0 0.8rem 0; font-size: 1.05rem; font-weight: 700; color: var(--success);">
+                                🏆 Best Card: {{ cardOptimizerResult.card_name }}
+                            </h4>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Base Catalog Price:</span>
+                                    <span style="font-family: var(--font-mono);">{{ formatCurrency(cardOptimizerResult.catalog_price) }}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Store Coupon Discount:</span>
+                                    <span style="font-family: var(--font-mono); color: var(--success);">-{{ formatCurrency(cardOptimizerResult.coupon_discount) }}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Instant Bank Discount:</span>
+                                    <span style="font-family: var(--font-mono); color: var(--success);">-{{ formatCurrency(cardOptimizerResult.bank_instant_discount) }}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: var(--text-secondary);">Reward Points Accrued Value:</span>
+                                    <span style="font-family: var(--font-mono); color: #3b82f6;">-{{ formatCurrency(cardOptimizerResult.reward_points_value_inr) }}</span>
+                                </div>
+                                <div style="border-top: 2px dashed var(--border); padding-top: 0.6rem; margin-top: 0.3rem; display: flex; justify-content: space-between; align-items: baseline;">
+                                    <span style="font-weight: 700; font-size: 1.05rem;">Effective Net Cost:</span>
+                                    <span style="font-weight: 800; font-size: 1.4rem; color: var(--success); font-family: var(--font-mono);">{{ formatCurrency(cardOptimizerResult.effective_net_cost) }}</span>
+                                </div>
+                                <div style="background: var(--bg-subtle); padding: 0.6rem; border-radius: var(--radius-sm); margin-top: 0.5rem; font-size: 0.82rem;">
+                                    <strong>Net Rate:</strong> {{ formatCurrency(cardOptimizerResult.effective_price_per_gram) }}/g | <strong>Spot Rate:</strong> {{ formatCurrency(cardOptimizerResult.spot_price_per_gram) }}/g<br>
+                                    <span :style="cardOptimizerResult.is_sub_spot ? 'color: #ef4444; font-weight: 700;' : 'color: var(--text-secondary);'">
+                                        {{ cardOptimizerResult.is_sub_spot ? '🔥 SUB-SPOT DEAL: Saves ' + formatCurrency(cardOptimizerResult.sub_spot_spread_per_gram) + '/g below spot' : 'Standard Rate' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: REVERSE ARBITRAGE BUYBACK TERMINAL                      -->
+                <!-- ============================================================ -->
+                <div class="buyback-container" v-if="activeTab === 'buyback'" style="padding: 1.5rem;">
+                    <!-- Terminal Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.6rem;">
+                                <span style="background: rgba(236, 72, 153, 0.15); color: #ec4899; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">Bullion Liquidation Alpha</span>
+                                <span class="badge" style="background: var(--success); color: #fff;">LIVE BENCHMARK</span>
+                            </div>
+                            <h2 style="margin: 0.4rem 0 0.2rem 0; font-size: 1.8rem; font-weight: 800; font-family: var(--font-serif);">Reverse Arbitrage & Buyback Terminal</h2>
+                            <p style="color: var(--text-secondary); font-size: 0.88rem; margin: 0;">
+                                Calculate instant physical cash/RTGS buyback profit across Indian bullion hubs (Zaveri Bazaar, Muthoot, MMTC) on sub-spot deals.
+                            </p>
+                        </div>
+
+                        <!-- Live IBJA Benchmark Badges -->
+                        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <div style="background: var(--surface); border: 1px solid var(--border); padding: 0.5rem 0.85rem; border-radius: var(--radius-md); text-align: center;">
+                                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">24K (999) BUYBACK</div>
+                                <div style="font-weight: 800; color: #f59e0b; font-family: var(--font-mono); font-size: 1.05rem;">{{ formatCurrency(buybackLiveRates['24K']) }}/g</div>
+                            </div>
+                            <div style="background: var(--surface); border: 1px solid var(--border); padding: 0.5rem 0.85rem; border-radius: var(--radius-md); text-align: center;">
+                                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">22K (916) BUYBACK</div>
+                                <div style="font-weight: 800; color: var(--text-primary); font-family: var(--font-mono); font-size: 1.05rem;">{{ formatCurrency(buybackLiveRates['22K']) }}/g</div>
+                            </div>
+                            <div style="background: var(--surface); border: 1px solid var(--border); padding: 0.5rem 0.85rem; border-radius: var(--radius-md); text-align: center;">
+                                <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">18K (750) BUYBACK</div>
+                                <div style="font-weight: 800; color: var(--text-secondary); font-family: var(--font-mono); font-size: 1.05rem;">{{ formatCurrency(buybackLiveRates['18K']) }}/g</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calculator & Results Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                        <!-- Input Parameters Form -->
+                        <div style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border);">
+                            <h3 style="margin: 0 0 1.25rem 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fa-solid fa-sliders" style="color: #ec4899;"></i>
+                                <span>Purchase & Liquidation Parameters</span>
+                            </h3>
+
+                            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                                <div>
+                                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Delivered Purchase Cost (₹)</label>
+                                    <input type="number" v-model.number="buybackInput.deliveredCost" @input="calculateBuyback" class="form-control" style="width: 100%; font-family: var(--font-mono); font-size: 1rem; font-weight: 700;" placeholder="e.g. 124345">
+                                    <small style="color: var(--text-muted); font-size: 0.74rem;">Net cost paid on e-commerce (after coupon & card discount)</small>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div>
+                                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Weight (Grams)</label>
+                                        <input type="number" step="0.5" v-model.number="buybackInput.weight" @input="calculateBuyback" class="form-control" style="width: 100%; font-family: var(--font-mono);" placeholder="e.g. 10">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Gold Purity</label>
+                                        <select v-model="buybackInput.purity" @change="calculateBuyback" class="form-control" style="width: 100%;">
+                                            <option value="24K">24K (999 Pure)</option>
+                                            <option value="22K">22K (916 Standard)</option>
+                                            <option value="18K">18K (750 Jewellery)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div>
+                                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Item Type</label>
+                                        <select v-model="buybackInput.itemType" @change="calculateBuyback" class="form-control" style="width: 100%;">
+                                            <option value="bar">Minted Bar (0.25% fee)</option>
+                                            <option value="coin">Tamper Coin (0.25% fee)</option>
+                                            <option value="jewellery">Jewellery (1.0% melt)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Payout Mode</label>
+                                        <select v-model="buybackInput.paymentMode" @change="calculateBuyback" class="form-control" style="width: 100%;">
+                                            <option value="RTGS">RTGS / NEFT (Bank)</option>
+                                            <option value="CASH">Cash Settlement</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                    <div>
+                                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Cycle (Days)</label>
+                                        <input type="number" v-model.number="buybackInput.turnoverDays" @input="calculateBuyback" class="form-control" style="width: 100%;" placeholder="5">
+                                    </div>
+                                    <div style="display: flex; align-items: flex-end;">
+                                        <button class="btn-primary" @click="calculateBuyback" style="width: 100%; padding: 0.65rem;">
+                                            <i class="fa-solid fa-calculator"></i> Recalculate
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Liquidation Payout Card -->
+                        <div v-if="buybackResult" style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                    <span style="font-size: 0.85rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted);">Liquidation Payout Summary</span>
+                                    <span :style="buybackResult.arbitrage_viable ? 'background: #dcfce7; color: #166534;' : 'background: #fee2e2; color: #991b1b;'" style="font-size: 0.75rem; font-weight: 800; padding: 0.2rem 0.6rem; border-radius: 9999px;">
+                                        {{ buybackResult.arbitrage_viable ? 'POSITIVE ARBITRAGE' : 'NEGATIVE SPREAD' }}
+                                    </span>
+                                </div>
+
+                                <!-- Net Cash/RTGS Payout Hero -->
+                                <div style="background: var(--bg-subtle); padding: 1.25rem; border-radius: var(--radius-md); text-align: center; margin-bottom: 1.25rem; border: 1px solid var(--border);">
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">NET LIQUIDATION PAYOUT</div>
+                                    <div style="font-size: 2.2rem; font-weight: 800; color: var(--success); font-family: var(--font-mono); margin: 0.2rem 0;">
+                                        {{ formatCurrency(buybackResult.net_liquidation_payout) }}
+                                    </div>
+                                    <div style="font-size: 0.82rem; color: var(--text-secondary);">
+                                        Gross Value: {{ formatCurrency(buybackResult.gross_liquidation_value) }} | Deduction: -{{ formatCurrency(buybackResult.assaying_deduction_amount) }} ({{ buybackResult.assaying_deduction_pct }}%)
+                                    </div>
+                                </div>
+
+                                <!-- Key Profit & ROI Metrics -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                                    <div style="background: var(--surface-card); border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius-md);">
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">Net Profit / Margin</div>
+                                        <div :style="buybackResult.net_profit_inr > 0 ? 'color: var(--success);' : 'color: #ef4444;'" style="font-size: 1.3rem; font-weight: 800; font-family: var(--font-mono);">
+                                            {{ buybackResult.net_profit_inr > 0 ? '+' : '' }}{{ formatCurrency(buybackResult.net_profit_inr) }}
+                                        </div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">{{ formatCurrency(buybackResult.margin_per_gram) }}/g net</div>
+                                    </div>
+                                    <div style="background: var(--surface-card); border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius-md);">
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">Annualized ROI</div>
+                                        <div :style="buybackResult.annualized_roi_pct > 0 ? 'color: #f59e0b;' : 'color: var(--text-muted);'" style="font-size: 1.3rem; font-weight: 800; font-family: var(--font-mono);">
+                                            {{ buybackResult.annualized_roi_pct }}%
+                                        </div>
+                                        <div style="font-size: 0.75rem; color: var(--text-muted);">{{ buybackResult.roi_pct }}% in {{ buybackResult.turnover_days }} days</div>
+                                    </div>
+                                </div>
+
+                                <!-- Section 269ST Warning if applicable -->
+                                <div v-if="buybackResult.tax_compliance_warning" style="background: #fef2f2; border: 1px solid #f87171; color: #b91c1c; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.8rem; margin-bottom: 1rem;">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <strong>Income Tax Warning:</strong> {{ buybackResult.tax_compliance_warning }}
+                                </div>
+                            </div>
+
+                            <!-- Recommended Physical Bullion Desks -->
+                            <div style="border-top: 1px solid var(--border); padding-top: 0.85rem; margin-top: 0.5rem;">
+                                <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.4rem;">OPTIMAL LIQUIDATION CHANNEL:</div>
+                                <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+                                    <i class="fa-solid fa-shop" style="color: #ec4899;"></i>
+                                    <span>Zaveri Bazaar / RTGS Bullion Trading Desks</span>
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                                    Direct wholesale RTGS payout with zero cash discount penalty on tamper-proof 999 mint packs.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Sub-Spot Liquidation Opportunities Table -->
+                    <div style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800;">Sub-Spot Deals Ready for Liquidation</h3>
+                                <p style="margin: 0.2rem 0 0 0; color: var(--text-secondary); font-size: 0.82rem;">Click "Simulate Buyback" on any active deal to model offline cash/RTGS arbitrage margin.</p>
+                            </div>
+                            <button class="btn-ghost" @click="fetchBuybackRates" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                                <i class="fa-solid fa-rotate"></i> Refresh
+                            </button>
+                        </div>
+
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" style="width: 100%; font-size: 0.86rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Platform & Item</th>
+                                        <th>Weight / Purity</th>
+                                        <th>Delivered Cost</th>
+                                        <th>Buyback Value</th>
+                                        <th>Net Profit</th>
+                                        <th>Annualized ROI</th>
+                                        <th style="text-align: right;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(deal, idx) in subSpotBuybackDeals.slice(0, 10)" :key="idx">
+                                        <td>
+                                            <div style="font-weight: 700; color: var(--text-primary);">{{ deal.title }}</div>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">{{ deal.platform }} • Best Card: {{ deal.recommended_card }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="badge" style="background: var(--bg-subtle);">{{ deal.buyback_evaluation?.weight_grams }}g {{ deal.buyback_evaluation?.purity }}</span>
+                                        </td>
+                                        <td style="font-family: var(--font-mono); font-weight: 700;">
+                                            {{ formatCurrency(deal.effective_net_price) }}
+                                        </td>
+                                        <td style="font-family: var(--font-mono); color: var(--success); font-weight: 700;">
+                                            {{ formatCurrency(deal.buyback_evaluation?.net_liquidation_payout) }}
+                                        </td>
+                                        <td style="font-family: var(--font-mono); font-weight: 800; color: var(--success);">
+                                            +{{ formatCurrency(deal.buyback_evaluation?.net_profit_inr) }}
+                                        </td>
+                                        <td style="font-family: var(--font-mono); color: #f59e0b; font-weight: 700;">
+                                            {{ deal.buyback_evaluation?.annualized_roi_pct }}%
+                                        </td>
+                                        <td style="text-align: right;">
+                                            <button class="btn-primary" @click="loadDealIntoBuyback(deal)" style="padding: 0.35rem 0.75rem; font-size: 0.78rem;">
+                                                <i class="fa-solid fa-calculator"></i> Simulate
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: RESTOCK SNIPER & ABANDONED CART MONITOR                 -->
+                <!-- ============================================================ -->
+                <div class="sniper-container" v-if="activeTab === 'sniper'" style="padding: 1.5rem;">
+                    <!-- Sniper Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.6rem;">
+                                <span style="background: rgba(6, 182, 212, 0.15); color: #06b6d4; font-weight: 800; font-size: 0.75rem; padding: 0.25rem 0.65rem; border-radius: 9999px; text-transform: uppercase;">Micro-Worker Subagent</span>
+                                <span class="badge" style="background: #06b6d4; color: #fff;">30-SEC POLLER</span>
+                            </div>
+                            <h2 style="margin: 0.4rem 0 0.2rem 0; font-size: 1.8rem; font-weight: 800; font-family: var(--font-serif);">High-Frequency Restock Sniper</h2>
+                            <p style="color: var(--text-secondary); font-size: 0.88rem; margin: 0;">
+                                Monitors out-of-stock gold coins & bars on Ajio, Myntra, and Tata CLiQ for sudden inventory drops from cancelled orders & abandoned carts.
+                            </p>
+                        </div>
+
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button class="btn-primary" @click="pollSniperNow" :disabled="sniperPolling" style="padding: 0.65rem 1.25rem;">
+                                <i class="fa-solid" :class="sniperPolling ? 'fa-circle-notch fa-spin' : 'fa-crosshairs'"></i>
+                                <span>{{ sniperPolling ? 'Polling SKUs...' : 'Poll SKUs Now' }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sniper Status & WhatsApp Test Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                        <!-- Worker Health & Monitored Counts -->
+                        <div style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border);">
+                            <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fa-solid fa-microchip" style="color: #06b6d4;"></i>
+                                <span>Sniper State Machine</span>
+                            </h3>
+
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border);">
+                                    <span style="color: var(--text-secondary); font-size: 0.88rem;">Polling Status:</span>
+                                    <span class="badge" style="background: #dcfce7; color: #166534; font-weight: 700;">ACTIVE (STANDBY)</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border);">
+                                    <span style="color: var(--text-secondary); font-size: 0.88rem;">SKUs In Watchlist:</span>
+                                    <span style="font-weight: 800; font-family: var(--font-mono); font-size: 1.1rem;">{{ sniperWatchList.length }} Monitored SKUs</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--border);">
+                                    <span style="color: var(--text-secondary); font-size: 0.88rem;">Latency To Dispatch:</span>
+                                    <span style="font-weight: 800; color: var(--success);">&lt; 850 ms (Sub-second)</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0;">
+                                    <span style="color: var(--text-secondary); font-size: 0.88rem;">Dispatch Channels:</span>
+                                    <span style="font-size: 0.85rem; font-weight: 700;">Telegram Bot + WhatsApp API</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WhatsApp VIP Gateway Tester -->
+                        <div style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border);">
+                            <h3 style="margin: 0 0 0.4rem 0; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fa-brands fa-whatsapp" style="color: #25d366;"></i>
+                                <span>WhatsApp Cloud VIP Test</span>
+                            </h3>
+                            <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0 0 1rem 0;">
+                                Preview how sub-second WhatsApp template notifications are delivered with instant 1-click cart buttons.
+                            </p>
+
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                <input type="text" v-model="whatsAppTestPhone" class="form-control" style="flex: 1;" placeholder="+91 9876543210">
+                                <button class="btn-primary" @click="sendTestWhatsApp" style="background: #25d366; border: none; font-weight: 700;">
+                                    <i class="fa-solid fa-paper-plane"></i> Send Alert
+                                </button>
+                            </div>
+
+                            <div v-if="whatsAppTestStatus" style="background: var(--bg-subtle); padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.8rem; border: 1px solid var(--border);">
+                                <strong>Result:</strong> Status: <span style="font-weight: 700; color: var(--success);">{{ whatsAppTestStatus.status }}</span> (Phone: {{ whatsAppTestStatus.phone }})<br>
+                                <span style="color: var(--text-muted);">{{ whatsAppTestStatus.message_preview || 'Template payload generated successfully' }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monitored Restock SKUs Table -->
+                    <div style="background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; border: 1px solid var(--border);">
+                        <h3 style="margin: 0 0 1rem 0; font-size: 1.15rem; font-weight: 800;">Target SKUs on High-Frequency Watch</h3>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" style="width: 100%; font-size: 0.86rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Target SKU Name</th>
+                                        <th>Store</th>
+                                        <th>Target Price</th>
+                                        <th>Weight / Purity</th>
+                                        <th>Status</th>
+                                        <th>Checks</th>
+                                        <th style="text-align: right;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="sku in sniperWatchList" :key="sku.sku_id">
+                                        <td style="font-weight: 700; color: var(--text-primary);">
+                                            {{ sku.title }}
+                                        </td>
+                                        <td>
+                                            <span class="badge" style="background: var(--bg-subtle);">{{ sku.platform }}</span>
+                                        </td>
+                                        <td style="font-family: var(--font-mono); font-weight: 700;">
+                                            {{ formatCurrency(sku.target_price) }}
+                                        </td>
+                                        <td>{{ sku.weight_grams }}g {{ sku.purity }}</td>
+                                        <td>
+                                            <span :style="sku.last_status === 'IN_STOCK' ? 'background: #dcfce7; color: #166534;' : 'background: #fee2e2; color: #991b1b;'" style="font-weight: 800; font-size: 0.74rem; padding: 0.2rem 0.55rem; border-radius: 9999px;">
+                                                {{ sku.last_status === 'IN_STOCK' ? '🔥 IN STOCK' : 'OUT OF STOCK' }}
+                                            </span>
+                                        </td>
+                                        <td style="font-family: var(--font-mono); color: var(--text-muted);">{{ sku.check_count || 1 }} checks</td>
+                                        <td style="text-align: right;">
+                                            <a :href="sku.url" target="_blank" class="btn-ghost" style="padding: 0.35rem 0.7rem; font-size: 0.78rem;">
+                                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Store
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================ -->
+                <!-- TAB: PRO MEMBERSHIP PLANS                                    -->
+                <!-- ============================================================ -->
+                <div class="vip-plans-container" v-if="activeTab === 'vip-plans'" style="padding: 1.5rem;">
+                    <div style="text-align: center; max-width: 650px; margin: 0 auto 2rem auto;">
+                        <span style="background: rgba(234, 179, 8, 0.15); color: #b45309; font-weight: 800; font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 9999px; text-transform: uppercase;">Guaranteed Positive ROI</span>
+                        <h2 style="margin: 0.75rem 0 0.5rem 0; font-size: 2.2rem; font-weight: 800; font-family: var(--font-serif);">Unlock Gold Deal Pro</h2>
+                        <p style="color: var(--text-secondary); font-size: 1rem; margin: 0;">
+                            A single sub-spot bullion order saves ₹2,500 to ₹8,000+. Your subscription pays for itself on day one.
+                        </p>
+                    </div>
+
+                    <!-- Pricing Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; max-width: 1100px; margin: 0 auto;">
+                        <div v-for="plan in proPlans" :key="plan.id" style="background: var(--surface); border-radius: var(--radius-xl); padding: 1.75rem; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between; position: relative;" :style="plan.is_featured ? 'border: 2px solid var(--gold); box-shadow: 0 12px 30px rgba(197, 160, 89, 0.15);' : ''">
+                            <div v-if="plan.is_featured" style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 0.25rem 0.75rem; border-radius: 9999px; text-transform: uppercase;">
+                                MOST POPULAR
+                            </div>
+
+                            <div>
+                                <h3 style="margin: 0 0 0.4rem 0; font-size: 1.25rem; font-weight: 800;">{{ plan.name }}</h3>
+                                <div style="display: flex; align-items: baseline; gap: 0.3rem; margin-bottom: 1.25rem;">
+                                    <span style="font-size: 2.2rem; font-weight: 800; font-family: var(--font-mono); color: var(--text-primary);">₹{{ plan.price_inr.toLocaleString('en-IN') }}</span>
+                                    <span style="color: var(--text-muted); font-size: 0.85rem;" v-if="plan.duration_days">/ {{ plan.duration_days }} days</span>
+                                </div>
+
+                                <ul style="list-style: none; padding: 0; margin: 0 0 1.5rem 0; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.88rem; color: var(--text-secondary);">
+                                    <li v-for="(feat, fIdx) in plan.features" :key="fIdx" style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <i class="fa-solid fa-check" style="color: var(--success);"></i>
+                                        <span>{{ feat }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <button class="btn-primary" @click="upgradePlan(plan.id)" style="width: 100%; padding: 0.75rem; font-weight: 700; text-align: center;" :style="plan.is_featured ? 'background: linear-gradient(135deg, #d97706, #f59e0b); border: none;' : ''">
+                                {{ userTier === plan.id.toUpperCase() ? 'CURRENT PLAN' : (plan.price_inr === 0 ? 'ACTIVE' : 'SELECT ' + plan.name.toUpperCase()) }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
 
@@ -1250,6 +1952,89 @@
             </div>
         </div>
 
+        <!-- Scan Target Stores Configuration Modal -->
+        <div class="palette-overlay scan-config-overlay" v-if="showScanConfigModal" @click.self="showScanConfigModal = false">
+            <div class="scan-config-box">
+                <!-- Header -->
+                <div class="scan-config-header">
+                    <div class="scan-config-title-row">
+                        <div class="scan-config-icon-badge">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </div>
+                        <div>
+                            <h3 class="scan-config-title">Select Target Stores</h3>
+                            <p class="scan-config-subtitle">Pick which dealers & marketplaces to scrape. Unchecked stores will be skipped.</p>
+                        </div>
+                    </div>
+                    <button class="btn-icon" @click="showScanConfigModal = false" title="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Info Callout -->
+                <div class="scan-config-alert">
+                    <i class="fa-solid fa-bolt" style="color: #f59e0b; margin-top: 3px; flex-shrink: 0;"></i>
+                    <div class="scan-config-alert-content">
+                        <strong>Fast Scan Recommended:</strong> By default, <strong>Bhima Gold</strong> is excluded because it scrapes page-by-page which takes ~60 seconds. The other 8 stores finish in ~15 seconds.
+                    </div>
+                </div>
+
+                <!-- Presets Bar -->
+                <div class="scan-config-presets">
+                    <span class="preset-label">Presets:</span>
+                    <button class="preset-chip" :class="{ 'active': isDefaultPresetActive }" @click="selectDefaultScanSites">
+                        <i class="fa-solid fa-bolt text-gold"></i> Default (8 Stores - Excl. Bhima)
+                    </button>
+                    <button class="preset-chip" :class="{ 'active': selectedScanSites.length === availableScanSites.length }" @click="selectAllScanSites">
+                        <i class="fa-solid fa-check-double"></i> All 9 Stores
+                    </button>
+                    <button class="preset-chip" @click="deselectAllScanSites">
+                        <i class="fa-solid fa-ban"></i> Clear All
+                    </button>
+                </div>
+
+                <!-- Stores Selection Grid -->
+                <div class="scan-stores-grid">
+                    <div 
+                        v-for="site in availableScanSites" 
+                        :key="site.key" 
+                        class="scan-store-card" 
+                        :class="{ 'selected': isScanSiteSelected(site.key), 'slow-store': site.speed === 'slow' }"
+                        @click="toggleScanSite(site.key)"
+                    >
+                        <div class="store-card-check">
+                            <i class="fa-solid fa-check" v-if="isScanSiteSelected(site.key)"></i>
+                        </div>
+                        <div class="store-card-info">
+                            <div class="store-name-row">
+                                <span class="store-name">{{ site.name }}</span>
+                                <span class="store-speed-tag" :class="'speed-' + site.speed">
+                                    <i class="fa-solid" :class="site.speed === 'slow' ? 'fa-hourglass-half' : 'fa-bolt'"></i>
+                                    {{ site.speed === 'slow' ? 'Slow (~60s)' : 'Fast (~3s)' }}
+                                </span>
+                            </div>
+                            <div class="store-desc">{{ site.desc }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="scan-config-footer">
+                    <div class="scan-footer-stats">
+                        <span class="font-mono text-gold" style="font-size: 1.1rem; font-weight: 700;">{{ selectedScanSites.length }}</span>
+                        <span class="text-muted">of {{ availableScanSites.length }} stores selected (~{{ getEstimatedScanTime() }}s estimated)</span>
+                    </div>
+                    <div class="scan-footer-actions">
+                        <button class="btn-secondary" @click="showScanConfigModal = false">Cancel</button>
+                        <button class="btn-primary" @click="startNewScan()" :disabled="selectedScanSites.length === 0">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>Start Scraping ({{ selectedScanSites.length }} Stores)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Live Scan Progress Modal (Maximizable / Minimizable) -->
         <div class="palette-overlay scan-progress-overlay" v-if="scanProgress.active && !scanProgress.minimized" @click.self="minimizeScanModal">
             <div class="scan-progress-box">
@@ -1306,9 +2091,9 @@
                     </div>
                 </div>
 
-                <!-- 9 Stores Live Status Grid -->
+                <!-- Active Stores Live Status Grid -->
                 <div class="scan-sites-section">
-                    <div class="section-subtitle">Target Dealers & Marketplaces (9 Sources)</div>
+                    <div class="section-subtitle">Target Dealers & Marketplaces ({{ scanProgress.sites.length }} Sources)</div>
                     <div class="scan-sites-grid">
                         <div v-for="site in scanProgress.sites" :key="site.key" class="site-status-card" :class="site.status">
                             <div class="site-card-top">
@@ -1432,6 +2217,71 @@
                 <span>Filters</span>
                 <span class="mobile-nav-badge highlight" v-if="activeFilterCount">{{ activeFilterCount }}</span>
             </button>
+        </div>
+
+        <!-- Pro Upgrade Modal (Interactive SaaS Paywall) -->
+        <div class="palette-overlay" v-if="showProModal" @click.self="showProModal = false">
+            <div class="palette-box" style="max-width: 780px; padding: 2rem; background: var(--surface); border-radius: var(--radius-xl); border: 1px solid var(--border);">
+                <!-- Modal Header -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                    <div>
+                        <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: rgba(217, 119, 6, 0.12); color: #d97706; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 800; text-transform: uppercase;">
+                            <i class="fa-solid fa-crown"></i> VIP Alpha Access
+                        </div>
+                        <h2 style="margin: 0.5rem 0 0.25rem 0; font-size: 1.75rem; font-weight: 800; font-family: var(--font-serif); color: var(--text-primary);">
+                            Activate Gold Deal Pro
+                        </h2>
+                        <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                            Get sub-second notifications before inventory vanishes, unredacted coupon codes, and live sub-spot bullion arbitrage.
+                        </p>
+                    </div>
+                    <button class="btn-icon" @click="showProModal = false" title="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Plan Selection Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <div v-for="plan in proPlans.filter(p => p.price_inr > 0)" :key="plan.id"
+                        @click="selectedPlan = plan.id"
+                        style="border-radius: var(--radius-lg); padding: 1.25rem; cursor: pointer; transition: all 0.2s; position: relative;"
+                        :style="selectedPlan === plan.id ? 'border: 2px solid var(--gold); background: rgba(197, 160, 89, 0.08); box-shadow: 0 4px 15px rgba(197, 160, 89, 0.15);' : 'border: 1px solid var(--border); background: var(--bg-subtle);'">
+                        
+                        <div v-if="plan.is_featured" style="position: absolute; top: -10px; right: 10px; background: var(--gold); color: #fff; font-size: 0.68rem; font-weight: 800; padding: 0.15rem 0.5rem; border-radius: 9999px;">
+                            POPULAR
+                        </div>
+
+                        <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.4rem; color: var(--text-primary);">{{ plan.name }}</div>
+                        <div style="font-size: 1.6rem; font-weight: 800; font-family: var(--font-mono); color: var(--text-primary); margin-bottom: 0.5rem;">
+                            ₹{{ plan.price_inr.toLocaleString('en-IN') }}
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                            Valid for {{ plan.duration_days }} days
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature Highlights -->
+                <div style="background: var(--bg-subtle); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.88rem;">
+                    <div style="font-weight: 700; margin-bottom: 0.6rem; color: var(--text-primary);">Included in all Pro Tiers:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; color: var(--text-secondary);">
+                        <div><i class="fa-solid fa-check" style="color: var(--success); margin-right: 0.4rem;"></i> 0-Second VIP Telegram & WhatsApp</div>
+                        <div><i class="fa-solid fa-check" style="color: var(--success); margin-right: 0.4rem;"></i> Sub-Spot Negative Premium Deals</div>
+                        <div><i class="fa-solid fa-check" style="color: var(--success); margin-right: 0.4rem;"></i> 1-Click Direct Cart Links with Coupons</div>
+                        <div><i class="fa-solid fa-check" style="color: var(--success); margin-right: 0.4rem;"></i> Full SGB Secondary Market Screener</div>
+                    </div>
+                </div>
+
+                <!-- Activation Button -->
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <button class="btn-primary" @click="upgradePlan(selectedPlan)" style="flex: 1; padding: 0.85rem; font-size: 1rem; font-weight: 800; background: linear-gradient(135deg, #d97706, #f59e0b); border: none; text-align: center;">
+                        <i class="fa-solid fa-bolt"></i> Activate Instant Pro Access
+                    </button>
+                    <button class="btn-secondary" @click="showProModal = false" style="padding: 0.85rem 1.25rem;">
+                        Maybe Later
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- Sticky 1-Click WhatsApp Share Floating Widget -->

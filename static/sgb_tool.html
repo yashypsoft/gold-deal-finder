@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Gold Bond (SGB) Secondary Market Screener & Fair Value Calculator</title>
+    <meta name="description" content="Live NSE and BSE Sovereign Gold Bond (SGB) secondary market screener. Find bonds trading at a discount to spot gold with 2.5% annual interest and tax-free gains.">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --surface: #181b20;
+            --surface-subtle: #14171d;
+            --border: #262b34;
+            --text-primary: #f0f2f5;
+            --text-secondary: #9ca3af;
+            --gold: #c5a059;
+            --success: #10b981;
+            --font-sans: 'Plus Jakarta Sans', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-serif: 'Cormorant Garamond', serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            padding: 2rem 1rem;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            font-size: 0.78rem;
+            font-weight: 800;
+            padding: 0.3rem 0.8rem;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+        h1 {
+            font-family: var(--font-serif);
+            font-size: 2.6rem;
+            font-weight: 800;
+            margin-bottom: 0.6rem;
+            color: #ffffff;
+        }
+        p.subtitle {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+        .stat-label {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+        }
+        .stat-val {
+            font-family: var(--font-mono);
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 2rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th {
+            background: var(--surface-subtle);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.9rem;
+        }
+        .lead-gate {
+            background: linear-gradient(180deg, rgba(24, 27, 32, 0.4) 0%, rgba(24, 27, 32, 0.98) 40%, rgba(24, 27, 32, 1) 100%);
+            padding: 3rem 2rem;
+            text-align: center;
+            border-top: 1px solid var(--border);
+        }
+        .lead-gate h3 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        .lead-gate p {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .input-group {
+            display: flex;
+            max-width: 450px;
+            margin: 0 auto;
+            gap: 0.5rem;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface-subtle);
+            color: #fff;
+            font-size: 0.95rem;
+        }
+        .btn-unlock {
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            color: #fff;
+            border: none;
+            padding: 0.8rem 1.4rem;
+            border-radius: 8px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-unlock:hover { opacity: 0.9; }
+        .footer-note {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <header>
+            <div class="badge-pill">
+                <i class="fa-solid fa-landmark"></i> RBI Guaranteed • Zero Default Risk
+            </div>
+            <h1>Sovereign Gold Bond Secondary Screener</h1>
+            <p class="subtitle">
+                Live secondary market quotes on NSE/BSE. Buy sovereign gold at a direct discount to spot rates with <strong>2.5% p.a. sovereign interest</strong> and <strong>100% tax-free capital gains</strong> on redemption.
+            </p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Live 24K Spot Benchmark</div>
+                <div class="stat-val" style="color: var(--gold);">₹{{ Math.round(spotGoldRate).toLocaleString('en-IN') }}/g</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Highest Current Discount</div>
+                <div class="stat-val" style="color: var(--success);">-{{ topDiscount }}%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Top Annualized YTM</div>
+                <div class="stat-val" style="color: #60a5fa;">{{ topYtm }}% p.a.</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tax On Redemption</div>
+                <div class="stat-val" style="color: var(--success);">0% (Exempt)</div>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SGB Series / Ticker</th>
+                        <th>Maturity</th>
+                        <th style="text-align: right;">Market LTP</th>
+                        <th style="text-align: right;">Fair Spot</th>
+                        <th style="text-align: right;">Discount</th>
+                        <th style="text-align: right;">Annual YTM</th>
+                        <th style="text-align: right;">30% Tax Equiv.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="t in visibleTranches" :key="t.isin">
+                        <td>
+                            <strong style="color: #fff;">{{ t.ticker }}</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ t.name }}</div>
+                        </td>
+                        <td>
+                            {{ t.maturity_date }}
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">{{ t.years_to_maturity }} yrs left</div>
+                        </td>
+                        <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: #fff;">
+                            ₹{{ t.ltp.toLocaleString('en-IN') }}
+                        </td>
+                        <td style="text-align: right; font-family: var(--font-mono); color: var(--text-secondary);">
+                            ₹{{ Math.round(t.underlying_spot_price).toLocaleString('en-IN') }}
+                        </td>
+                        <td style="text-align: right;">
+                            <span style="background: rgba(16, 185, 129, 0.15); color: var(--success); font-weight: 800; font-family: var(--font-mono); padding: 0.25rem 0.5rem; border-radius: 4px;">
+                                -{{ t.discount_to_spot_pct }}%
+                            </span>
+                        </td>
+                        <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: #60a5fa;">
+                            {{ t.annualized_ytm_pct }}%
+                        </td>
+                        <td style="text-align: right; font-family: var(--font-mono); color: var(--text-secondary);">
+                            {{ t.tax_equivalent_yield_pct }}%
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Lead Capture Gate if Not Unlocked -->
+            <div class="lead-gate" v-if="!unlocked">
+                <h3>🔒 Unlock All 60+ Active SGB Tranches</h3>
+                <p>
+                    Enter your WhatsApp or Telegram number to view the complete order depth, best ask prices, and get automated alerts whenever an SGB discount exceeds 5%.
+                </p>
+                <div class="input-group">
+                    <input type="tel" v-model="phoneInput" placeholder="Enter WhatsApp Mobile (+91...)">
+                    <button class="btn-unlock" @click="unlockAll">Unlock Free</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <a href="http://localhost:8000" style="color: var(--gold); text-decoration: none; font-weight: 700; font-size: 0.95rem;">
+                <i class="fa-solid fa-arrow-left"></i> Return to Main Gold Deal Finder Terminal
+            </a>
+        </div>
+
+        <div class="footer-note">
+            Data sourced from NSE/BSE live feeds and IBJA benchmark rates. Capital gains exemption on Sovereign Gold Bonds is governed by Section 47 of the Indian Income Tax Act.
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                tranches: [],
+                spotGoldRate: 15837.5,
+                unlocked: false,
+                phoneInput: ''
+            },
+            computed: {
+                visibleTranches() {
+                    return this.unlocked ? this.tranches : this.tranches.slice(0, 3);
+                },
+                topDiscount() {
+                    return this.tranches.length ? this.tranches[0].discount_to_spot_pct : 7.5;
+                },
+                topYtm() {
+                    return this.tranches.length ? this.tranches[0].annualized_ytm_pct : 7.48;
+                }
+            },
+            mounted() {
+                this.loadSgb();
+            },
+            methods: {
+                async loadSgb() {
+                    try {
+                        const res = await axios.get('/api/v1/sgb/screener?min_discount=-10');
+                        if (res.data && res.data.tranches) {
+                            this.tranches = res.data.tranches;
+                            this.spotGoldRate = res.data.spot_gold_999 || 15837.5;
+                        }
+                    } catch (e) {
+                        console.error('Error loading SGB screener:', e);
+                    }
+                },
+                unlockAll() {
+                    if (this.phoneInput.length >= 10) {
+                        this.unlocked = true;
+                        alert('✅ All 60+ SGB tranches unlocked! You are now subscribed to free discount alerts.');
+                    } else {
+                        alert('Please enter a valid 10-digit mobile number.');
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

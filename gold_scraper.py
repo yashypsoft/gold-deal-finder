@@ -187,7 +187,26 @@ class GoldScraper:
     #             return purity, sum(all_weights)
         
     #     return purity, None
-    def extract_purity_and_weight(self, title: str) -> Tuple[Optional[str], Optional[float]]:
+    def extract_purity(self, text: str) -> Optional[str]:
+        """
+        Extract gold purity (24K, 22K, 18K, 14K, 995) from text.
+        """
+        if not text:
+            return None
+        text_lower = text.lower()
+        purity_patterns = [
+            (r'24\s*kt|24\s*karat|\b999(?:\.9)?\b|24k|\b24\s*ct\b', '24K'),
+            (r'22\s*kt|22\s*karat|\b916\b|22k|\b22\s*ct\b', '22K'),
+            (r'18\s*kt|18\s*karat|\b750\b|18k|\b18\s*ct\b', '18K'),
+            (r'14\s*kt|14\s*karat|\b585\b|14k|\b14\s*ct\b', '14K'),
+            (r'\b995\b', '995'),
+        ]
+        for pattern, purity_value in purity_patterns:
+            if re.search(pattern, text_lower):
+                return purity_value
+        return None
+
+    def extract_purity_and_weight(self, title: str, default_purity: Optional[str] = None) -> Tuple[Optional[str], Optional[float]]:
         """
         Extract purity and weight from a gold product title.
         Returns: (purity, weight_in_grams)
@@ -202,18 +221,7 @@ class GoldScraper:
             return None, None
     
         # ── PURITY ───────────────────────────────────────────────────────────────
-        purity = None
-        purity_patterns = [
-            (r'24\s*kt|24\s*karat|\b999\b|24k', '24K'),
-            (r'22\s*kt|22\s*karat|\b916\b|22k', '22K'),
-            (r'18\s*kt|18\s*karat|\b750\b|18k', '18K'),
-            (r'14\s*kt|14\s*karat|\b585\b|14k', '14K'),
-            (r'\b995\b', '995'),
-        ]
-        for pattern, purity_value in purity_patterns:
-            if re.search(pattern, title_lower):
-                purity = purity_value
-                break
+        purity = self.extract_purity(title)
     
         # ── WEIGHT ───────────────────────────────────────────────────────────────
         PURITY_NUMBERS = {24, 22, 18, 14, 999, 916, 750, 585, 995}
@@ -335,7 +343,9 @@ class GoldScraper:
         if all_weights:
             # If purity wasn't explicitly mentioned in the title, check product context
             if not purity:
-                if any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
+                if default_purity:
+                    purity = default_purity
+                elif any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
                     purity = '24K'
                 elif 'gold' in title_lower:
                     purity = '22K'
@@ -343,7 +353,9 @@ class GoldScraper:
             return purity, all_weights[0]
 
         if not purity:
-            if any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
+            if default_purity:
+                purity = default_purity
+            elif any(k in title_lower for k in ['coin', 'bar', 'biscuit', 'ingot', 'bullion', 'sovereign', 'lakshmi', 'ganesh', 'victoria', 'pamp']):
                 purity = '24K'
             elif 'gold' in title_lower:
                 purity = '22K'
@@ -1458,7 +1470,8 @@ class GoldScraper:
                 r = requests.get(url, headers=headers, timeout=12)
                 if r.status_code != 200:
                     continue
-                data = r.json().get('data', {}).get('products', {})
+                res_json = r.json() or {}
+                data = (res_json.get('data') or {}).get('products') or {}
                 items = data.get('items', [])
                 if not items:
                     break
@@ -1476,10 +1489,26 @@ class GoldScraper:
                     if selling_price < 1000:
                         continue
 
-                    purity, weight = self.extract_purity_and_weight(title)
+                    metal_label = item.get('metal_label', '') or ''
+                    sku = item.get('sku', '') or ''
+                    url_key = item.get('url_key', '') or ''
+                    material_label = item.get('material_label', '') or ''
+
+                    # Purity / Carat mapping for Joyalukkas:
+                    # 1. Check metal_label (Joyalukkas API specifies e.g. "22 KT Yellow Gold")
+                    purity = self.extract_purity(metal_label)
+                    # 2. Check title
                     if not purity:
-                        sku = item.get('sku', '')
-                        purity = '24K' if ('24' in sku or '24k' in title.lower() or '999' in title.lower()) else '22K'
+                        purity = self.extract_purity(title)
+                    # 3. Check SKU and URL key
+                    if not purity:
+                        purity = self.extract_purity(f"{sku} {url_key} {material_label}")
+                    # 4. Fallback: If carat is not found, default to 22K (NOT 24K)
+                    if not purity:
+                        purity = '22K'
+
+                    # Extract weight from title, using identified purity as fallback
+                    _, weight = self.extract_purity_and_weight(title, default_purity=purity)
 
                     if not weight or weight < 0.3:
                         continue
@@ -1635,12 +1664,14 @@ class GoldScraper:
         print(f"✅ Malabar Gold total: {len(products)}")
         return products
 
-    def scrape_all(self, progress_callback=None) -> List[Dict]:
+    def scrape_all(self, progress_callback=None, sites: Optional[List[str]] = None) -> List[Dict]:
         """
-        Scrapes all sources concurrently with live progress reporting.
+        Scrapes all or selected sources concurrently with live progress reporting.
         progress_callback: Callable[[site_key, status, count, message], None]
+        sites: Optional list of site keys to scrape (e.g. ['ajio', 'joyalukkas']).
+               If None or empty, all sources are scraped.
         """
-        tasks = [
+        all_tasks = [
             ('ajio', 'AJIO', self.scrape_ajio),
             ('myntra', 'Myntra', self.scrape_myntra),
             ('candere', 'Candere / Kalyan', self.scrape_candere),
@@ -1651,6 +1682,14 @@ class GoldScraper:
             ('joyalukkas', 'Joyalukkas', self.scrape_joyalukkas),
             ('malabar', 'Malabar Gold', self.scrape_malabar),
         ]
+
+        if sites:
+            site_set = {s.lower().strip() for s in sites if s.strip()}
+            tasks = [t for t in all_tasks if t[0] in site_set]
+            if not tasks:
+                tasks = all_tasks
+        else:
+            tasks = all_tasks
 
         all_products = []
 

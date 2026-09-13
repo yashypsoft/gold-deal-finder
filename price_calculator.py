@@ -5,7 +5,7 @@ import os
 import fcntl
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any, Union
 from config import GST_RATE, PURITY_MAPPING
 import logging
 import threading
@@ -354,15 +354,24 @@ class GoldPriceCalculator:
         }
     
     def calculate_expected_price(self, weight: float, purity: str, 
-                                product_type: str = 'jewellery') -> Dict:
+                                product_type: Any = 'jewellery',
+                                is_jewellery: Optional[bool] = None) -> Dict:
         """
         Calculate expected price for gold item
         
         Args:
             weight: Weight in grams
             purity: '24K', '22K', '18K', '14K'
-            product_type: 'jewellery' or 'coin'
+            product_type: 'jewellery' or 'coin' (or boolean is_jewellery)
+            is_jewellery: Optional boolean indicating jewellery vs coin
         """
+        if is_jewellery is not None:
+            is_coin = not is_jewellery
+        elif isinstance(product_type, bool):
+            is_coin = not product_type
+        else:
+            is_coin = (str(product_type).lower() == 'coin')
+
         # Get current gold prices
         gold_data = self.get_live_gold_price()
         
@@ -390,7 +399,7 @@ class GoldPriceCalculator:
         gold_value = base_price_per_gram * weight
         
         # Determine making charges key
-        if product_type == 'coin':
+        if is_coin:
             charges_key = f'coin_{purity}'
         else:
             charges_key = f'jewellery_{purity}'
@@ -398,7 +407,7 @@ class GoldPriceCalculator:
         # Get making charges percentage
         making_charges_percent = self.MAKING_CHARGES.get(
             charges_key, 
-            0.12 if product_type == 'jewellery' else 0.04
+            0.04 if is_coin else 0.12
         )
         
         # Calculate making charges
@@ -510,3 +519,7 @@ Last updated: {datetime.fromisoformat(gold_data['timestamp']).strftime('%d %b %Y
             except (ValueError, TypeError):
                 return None
         return None
+
+
+# Singleton instance for convenient imports
+price_calculator = GoldPriceCalculator()

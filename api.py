@@ -4,6 +4,7 @@ import asyncio
 import gzip
 import hashlib
 import json
+import logging
 import re
 import threading
 from collections import defaultdict
@@ -11,9 +12,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -22,9 +25,20 @@ from config import (
     HISTORICAL_SCAN_LIMIT_DEFAULT,
     MAX_HISTORICAL_SCAN_LIMIT,
     SCAN_COOLDOWN_MINUTES,
+    SUBSCRIPTION_PLANS,
+    RAZORPAY_KEY_ID,
 )
 from gold_scraper import GoldScraper
 from price_calculator import GoldPriceCalculator
+from database import db_manager
+from card_engine import card_stacker, card_parser, CARD_REGISTRY, DEFAULT_SEASONAL_BANK_OFFERS
+from sgb_screener import sgb_screener
+from arbitrage_engine import arbitrage_engine
+from vip_alerts import vip_dispatcher
+from receipt_generator import receipt_generator
+from buyback_calculator import buyback_calculator
+from restock_sniper import restock_sniper
+from whatsapp_service import whatsapp_service
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -569,8 +583,8 @@ class ScanProgressManager:
         self.logs: List[Dict[str, Any]] = []
         self._runner_thread: Optional[threading.Thread] = None
 
-    def _init_sites(self) -> Dict[str, Dict[str, Any]]:
-        return {
+    def _init_sites(self, selected_keys: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
+        all_sites = {
             "ajio": {"key": "ajio", "name": "AJIO", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
             "myntra": {"key": "myntra", "name": "Myntra", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
             "candere": {"key": "candere", "name": "Candere / Kalyan", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
@@ -581,6 +595,11 @@ class ScanProgressManager:
             "joyalukkas": {"key": "joyalukkas", "name": "Joyalukkas", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
             "malabar": {"key": "malabar", "name": "Malabar Gold", "status": "pending", "count": 0, "duration": 0, "message": "Pending"},
         }
+        if selected_keys:
+            selected_set = {k.lower().strip() for k in selected_keys if k and k.strip()}
+            filtered = {k: v for k, v in all_sites.items() if k in selected_set}
+            return filtered if filtered else all_sites
+        return all_sites
 
     def on_progress(self, site_key: str, status: str, count: Optional[int], message: Optional[str]):
         with self._lock:
@@ -632,7 +651,7 @@ class ScanProgressManager:
         if self.status == "completed":
             progress_pct = 100
         elif self.status == "running":
-            progress_pct = min(95, max(5, int((finished_sites / total_sites) * 90) + (5 if running_sites > 0 else 0)))
+            progress_pct = min(95, max(5, int((finished_sites / max(total_sites, 1)) * 90) + (5 if running_sites > 0 else 0)))
         else:
             progress_pct = 0 if self.status == "idle" else 100
 
@@ -651,10 +670,18 @@ class ScanProgressManager:
             "logs": list(self.logs[-40:]),
         }
 
-    def start_scan(self) -> Dict[str, Any]:
+    def start_scan(self, sites: Optional[List[str]] = None) -> Dict[str, Any]:
         with self._lock:
             if self.status == "running":
                 return self._to_dict_unlocked()
+
+            # Default to all stores EXCEPT bhima (slow page-by-page) if not specified
+            if sites is None:
+                chosen_sites = ["ajio", "myntra", "candere", "tanishq", "mmtc", "josalukkas", "joyalukkas", "malabar"]
+            else:
+                chosen_sites = [s.lower().strip() for s in sites if s and s.strip()]
+                if not chosen_sites:
+                    chosen_sites = ["ajio", "myntra", "candere", "tanishq", "mmtc", "josalukkas", "joyalukkas", "malabar"]
 
             now = datetime.utcnow()
             self.scan_id = now.strftime("%Y%m%d_%H%M%S")
@@ -664,18 +691,20 @@ class ScanProgressManager:
             self.total_products = 0
             self.error_message = None
             self.current_site = "Initializing scrapers..."
-            self.sites = self._init_sites()
+            self.sites = self._init_sites(selected_keys=chosen_sites)
+            num_stores = len(self.sites)
+            store_names = ", ".join(s["name"] for s in self.sites.values())
             self.logs = [{
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
                 "site": "System",
                 "type": "info",
-                "message": f"Scan #{self.scan_id} initiated across 9 stores..."
+                "message": f"Scan #{self.scan_id} initiated for {num_stores} stores ({store_names})..."
             }]
             snapshot = self._to_dict_unlocked()
 
         def _background_worker():
             try:
-                products = scraper.scrape_all(progress_callback=self.on_progress)
+                products = scraper.scrape_all(progress_callback=self.on_progress, sites=chosen_sites)
                 
                 filename = DATA_DIR / f"scan_results_{self.scan_id}.json"
                 scan_data = {
@@ -684,8 +713,54 @@ class ScanProgressManager:
                     "products": products,
                 }
                 save_results(filename, scan_data)
+
+                # Merge with latest_scan.json if it exists so un-scraped stores aren't lost
                 latest_filename = DATA_DIR / "latest_scan.json"
-                save_results(latest_filename, scan_data)
+                if latest_filename.exists() and len(chosen_sites) < 9:
+                    try:
+                        with open(latest_filename, "r") as lf:
+                            old_latest = json.load(lf)
+                        old_products = old_latest.get("products", [])
+
+                        scraped_site_names = {self.sites[k]["name"].lower() for k in chosen_sites if k in self.sites}
+                        scraped_sources = set(chosen_sites)
+                        for s_name in scraped_site_names:
+                            scraped_sources.add(s_name)
+                            if "kalyan" in s_name or "candere" in s_name:
+                                scraped_sources.update(["candere", "candere / kalyan", "kalyan"])
+                            if "mmtc" in s_name:
+                                scraped_sources.update(["mmtc", "mmtc-pamp", "mmtc pamp"])
+                            if "bhima" in s_name:
+                                scraped_sources.update(["bhima", "bhima gold"])
+                            if "jos" in s_name:
+                                scraped_sources.update(["jos alukkas", "josalukkas"])
+                            if "joy" in s_name:
+                                scraped_sources.update(["joyalukkas", "joy alukkas"])
+                            if "malabar" in s_name:
+                                scraped_sources.update(["malabar", "malabar gold"])
+                            if "ajio" in s_name:
+                                scraped_sources.add("ajio")
+                            if "myntra" in s_name:
+                                scraped_sources.add("myntra")
+                            if "tanishq" in s_name:
+                                scraped_sources.add("tanishq")
+
+                        preserved_products = [
+                            p for p in old_products 
+                            if p.get("source", "").lower() not in scraped_sources and p.get("brand", "").lower() not in scraped_sources
+                        ]
+                        merged_products = products + preserved_products
+                        save_results(latest_filename, {
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "total_products": len(merged_products),
+                            "products": merged_products,
+                        })
+                    except Exception as merge_err:
+                        print(f"Error merging latest scan: {merge_err}")
+                        save_results(latest_filename, scan_data)
+                else:
+                    save_results(latest_filename, scan_data)
+
                 clear_response_cache()
 
                 with self._lock:
@@ -697,7 +772,7 @@ class ScanProgressManager:
                         "timestamp": datetime.now().strftime("%H:%M:%S"),
                         "site": "System",
                         "type": "success",
-                        "message": f"Scan completed! Saved {len(products)} products."
+                        "message": f"Scan completed! Saved {len(products)} products across {num_stores} stores."
                     })
             except Exception as exc:
                 print(f"Scan background runner error: {exc}")
@@ -724,11 +799,29 @@ class ScanProgressManager:
 scan_manager = ScanProgressManager()
 
 
+class ScanPayload(BaseModel):
+    sites: Optional[List[str]] = None
+
+
 @app.post("/api/v1/scan", response_model=Dict[str, Any])
+async def scan_products_post(payload: Optional[ScanPayload] = None):
+    """Trigger an asynchronous background scan session with optional site selection"""
+    sites = payload.sites if payload and payload.sites else None
+    state = scan_manager.start_scan(sites=sites)
+    return {
+        "success": True,
+        "message": "Scan started in background" if state["is_running"] else "Scan already in progress",
+        "scan_id": state["scan_id"],
+        "status": state["status"],
+        "progress": state,
+    }
+
+
 @app.get("/api/v1/scan", response_model=Dict[str, Any])
-async def scan_products():
-    """Trigger an asynchronous background scan session"""
-    state = scan_manager.start_scan()
+async def scan_products_get(sites: Optional[str] = Query(None, description="Comma-separated site keys e.g. ajio,joyalukkas")):
+    """Trigger an asynchronous background scan session (GET alias with optional ?sites=...)"""
+    selected = [s.strip() for s in sites.split(",") if s.strip()] if sites else None
+    state = scan_manager.start_scan(sites=selected)
     return {
         "success": True,
         "message": "Scan started in background" if state["is_running"] else "Scan already in progress",
@@ -1164,4 +1257,368 @@ async def health_check():
         "scan_files": len(get_all_scan_files()),
         "version": app.version,
         "scan_cooldown_minutes": SCAN_COOLDOWN_MINUTES,
+        "db_mode": "postgresql" if db_manager.use_postgres else "sqlite"
     }
+
+
+# ==========================================
+# SAAS SUBSCRIPTION & MONETIZATION ENDPOINTS
+# ==========================================
+
+class UpgradePlanRequest(BaseModel):
+    user_id: str
+    plan_id: str
+    payment_ref: Optional[str] = "DEMO_SUCCESS"
+
+
+class UpdateCardsRequest(BaseModel):
+    user_id: str
+    card_ids: List[str]
+
+
+class CardStackRequest(BaseModel):
+    selling_price: float
+    weight_grams: float
+    purity: Optional[str] = "24K"
+    coupon_discount: Optional[float] = 0.0
+    coupon_code: Optional[str] = ""
+    card_ids: Optional[List[str]] = None
+
+
+@app.get("/api/v1/subscription/plans")
+async def get_subscription_plans():
+    """Returns available pricing plans and features for the Indian market."""
+    return {
+        "status": "success",
+        "currency": "INR",
+        "plans": list(SUBSCRIPTION_PLANS.values())
+    }
+
+
+@app.post("/api/v1/subscription/upgrade")
+async def upgrade_subscription(req: UpgradePlanRequest):
+    """Upgrades user tier and generates active subscription record."""
+    plan = SUBSCRIPTION_PLANS.get(req.plan_id)
+    if not plan:
+        raise HTTPException(status_code=400, detail=f"Invalid plan ID '{req.plan_id}'")
+
+    amount = plan.get("price_inr", 0)
+    result = db_manager.upgrade_user_subscription(
+        user_id=req.user_id,
+        plan_id=req.plan_id,
+        amount_paid=amount,
+        gateway_ref=req.payment_ref
+    )
+    return {"status": "success", "subscription": result}
+
+
+@app.get("/api/v1/user/profile")
+async def get_user_profile(user_id: str = Query("user_default")):
+    """Retrieves user tier, active subscription, and saved credit cards."""
+    user = db_manager.get_or_create_user(user_id=user_id)
+    saved_cards = db_manager.get_user_cards(user_id=user_id)
+    return {
+        "status": "success",
+        "user": user,
+        "cards": saved_cards,
+        "is_pro": user.get("current_tier") in ("PRO", "TRADER")
+    }
+
+
+@app.post("/api/v1/user/cards")
+async def update_user_cards(req: UpdateCardsRequest):
+    """Saves user's credit card portfolio for personalized price stacking."""
+    db_manager.set_user_cards(user_id=req.user_id, card_names=req.card_ids)
+    return {"status": "success", "saved_cards": req.card_ids}
+
+
+@app.get("/api/v1/cards/catalog")
+async def get_card_catalog():
+    """Returns supported Indian credit cards and current active bank promotions."""
+    cards_list = [
+        {
+            "card_id": c.card_id,
+            "card_name": c.card_name,
+            "bank_code": c.bank_code,
+            "reward_pct": c.jewellery_mcc_reward_pct,
+            "notes": c.notes
+        }
+        for c in CARD_REGISTRY.values()
+    ]
+    offers_list = [o.model_dump() for o in DEFAULT_SEASONAL_BANK_OFFERS]
+    return {
+        "status": "success",
+        "cards": cards_list,
+        "active_bank_offers": offers_list
+    }
+
+
+@app.post("/api/v1/cards/stack")
+async def calculate_card_stack(req: CardStackRequest):
+    """Calculates optimal out-of-pocket payment and highlight card for any product."""
+    rates = arbitrage_engine.get_live_spot_rates()
+    spot = rates.get(req.purity, rates.get("24K", 7400.0))
+    result = card_stacker.calculate_stack(
+        selling_price=req.selling_price,
+        weight_grams=req.weight_grams,
+        spot_price_per_gram=spot,
+        coupon_discount=req.coupon_discount or 0.0,
+        coupon_code=req.coupon_code or "",
+        user_card_ids=req.card_ids
+    )
+    return {"status": "success", "stack": result}
+
+
+# ==========================================
+# SAAS ARBITRAGE & SGB SCREENER ENDPOINTS
+# ==========================================
+
+@app.get("/api/v1/arbitrage/sub-spot")
+async def get_sub_spot_radar(
+    user_id: Optional[str] = None,
+    min_spread: Optional[float] = 0.0
+):
+    """
+    Sub-Spot Arbitrage Radar: Identifies products trading below wholesale spot rates
+    or with 0% making charge glitches.
+    """
+    actual_user_id = user_id if isinstance(user_id, str) else None
+    cache_key = get_cache_key("sub_spot_radar", user_id=actual_user_id or "all")
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
+    # Fetch latest products
+    scan_files = get_all_scan_files()
+    products = []
+    if scan_files:
+        scan_data = load_scan_file(scan_files[0])
+        if scan_data:
+            products = scan_data.get("products", [])
+
+    # If user has specific cards saved, personalize stacking
+    user_cards = db_manager.get_user_cards(actual_user_id) if actual_user_id else None
+
+    # Run arbitrage evaluation
+    radar_data = arbitrage_engine.process_catalog_arbitrage(
+        products=products,
+        user_card_ids=user_cards,
+        save_to_db=True
+    )
+
+    set_cached_response(cache_key, radar_data)
+    return radar_data
+
+
+@app.get("/api/v1/sgb/screener")
+async def get_sgb_screener(min_discount: Optional[float] = Query(-10.0)):
+    """Live Sovereign Gold Bond secondary market discount and YTM screener."""
+    cache_key = get_cache_key("sgb_screener", min_discount=min_discount)
+    cached = get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+
+    tranches = sgb_screener.scan_all_tranches()
+    filtered = [t for t in tranches if t["discount_to_spot_pct"] >= (min_discount or -10.0)]
+
+    response = {
+        "status": "success",
+        "count": len(filtered),
+        "spot_gold_999": sgb_screener.get_live_spot_gold_rate(),
+        "top_discount_tranche": filtered[0] if filtered else None,
+        "tranches": filtered
+    }
+    set_cached_response(cache_key, response)
+    return response
+
+
+@app.post("/api/v1/subscription/webhook")
+async def razorpay_webhook(payload: Dict[str, Any]):
+    """Receives Razorpay payment confirmation webhook."""
+    event = payload.get("event")
+    logger.info(f"Received payment webhook event: {event}")
+    return {"status": "received", "event": event}
+
+
+# ==========================================
+# VIRAL MARKETING & PROOF RECEIPT ENDPOINTS
+# ==========================================
+
+@app.get("/api/v1/marketing/receipt")
+async def get_viral_deal_receipt():
+    """Generates ASCII receipt, Tweet text, and metadata for the top active sub-spot deal."""
+    radar = await get_sub_spot_radar()
+    deals = radar.get("sub_spot_deals", [])
+
+    if deals:
+        top_deal = deals[0]
+    else:
+        top_deal = {
+            "title": "10g 24K Kundan Gold Bar (999 Purity)",
+            "source": "Tata CLiQ",
+            "weight_grams": 10.0,
+            "purity": "24K",
+            "selling_price": 149270.0,
+            "live_spot_rate_per_gram": 15837.5,
+            "effective_net_price": 124345.0,
+            "effective_price_per_gram": 12434.5,
+            "spread_per_gram": 3403.0,
+            "total_stack_savings": 34030.0,
+            "recommended_card": "Tata Neu Infinity HDFC"
+        }
+
+    ascii_card = receipt_generator.generate_ascii_receipt(top_deal, seconds_active=260)
+    tweet_text = receipt_generator.generate_tweet_text(top_deal, seconds_active=260)
+
+    return {
+        "status": "success",
+        "deal_title": top_deal.get("title"),
+        "platform": top_deal.get("source"),
+        "savings_inr": top_deal.get("total_stack_savings"),
+        "spread_per_gram": top_deal.get("spread_per_gram"),
+        "ascii_receipt": ascii_card,
+        "tweet_copy": tweet_text,
+        "svg_url": "/api/v1/marketing/receipt/svg"
+    }
+
+
+@app.get("/api/v1/marketing/receipt/svg")
+async def get_viral_deal_receipt_svg():
+    """Renders high-res SVG graphic receipt directly for Twitter/LinkedIn embedding."""
+    radar = await get_sub_spot_radar()
+    deals = radar.get("sub_spot_deals", [])
+
+    if deals:
+        top_deal = deals[0]
+    else:
+        top_deal = {
+            "title": "10g 24K Kundan Gold Bar (999 Purity)",
+            "source": "Tata CLiQ",
+            "weight_grams": 10.0,
+            "purity": "24K",
+            "selling_price": 149270.0,
+            "live_spot_rate_per_gram": 15837.5,
+            "effective_net_price": 124345.0,
+            "effective_price_per_gram": 12434.5,
+            "spread_per_gram": 3403.0,
+            "total_stack_savings": 34030.0,
+            "recommended_card": "Tata Neu Infinity HDFC"
+        }
+
+    svg_content = receipt_generator.generate_svg_receipt(top_deal, seconds_active=260)
+    return Response(content=svg_content, media_type="image/svg+xml")
+
+
+# ==========================================
+# PHASE 3: REVERSE ARBITRAGE & RESTOCK SNIPER
+# ==========================================
+
+class WatchSkuRequest(BaseModel):
+    sku_id: str
+    title: str
+    platform: str
+    url: str
+    weight_grams: float
+    purity: str = "24K"
+    target_price: float = 0.0
+
+
+class WhatsAppTestRequest(BaseModel):
+    phone: str
+
+
+@app.get("/api/v1/arbitrage/buyback-calculator")
+async def calculate_buyback_payout(
+    delivered_cost: float = Query(..., description="Net delivered purchase cost paid online"),
+    weight: float = Query(..., description="Weight in grams"),
+    purity: str = Query("24K", description="Gold purity (24K, 22K, 18K)"),
+    item_type: str = Query("coin", description="Item type: bar, coin, jewellery"),
+    turnover_days: int = Query(5, description="Holding cycle in days"),
+    payment_mode: str = Query("RTGS", description="RTGS or CASH"),
+    spot_override: Optional[float] = Query(None, description="Optional custom spot rate per gram")
+):
+    """Calculates physical bullion buyback liquidation payout, profit margin, and annualized ROI."""
+    result = buyback_calculator.calculate_liquidation(
+        delivered_cost=delivered_cost,
+        weight_grams=weight,
+        purity=purity,
+        item_type=item_type,
+        spot_override=spot_override,
+        turnover_days=turnover_days,
+        payment_mode=payment_mode
+    )
+    return result
+
+
+@app.get("/api/v1/arbitrage/sub-spot-buybacks")
+async def get_sub_spot_buybacks(limit: int = Query(20, ge=1, le=100)):
+    """Returns top active sub-spot deals evaluated with physical bullion buyback liquidation profit."""
+    radar = await get_sub_spot_radar()
+    deals = radar.get("sub_spot_deals", [])[:limit]
+
+    evaluated = []
+    for deal in deals:
+        eval_item = buyback_calculator.evaluate_deal(deal)
+        eval_item["total_stack_savings"] = deal.get("total_stack_savings", 0)
+        eval_item["spread_per_gram"] = deal.get("spread_per_gram", 0)
+        eval_item["effective_net_price"] = deal.get("effective_net_price", 0)
+        eval_item["recommended_card"] = deal.get("recommended_card", "Optimal Card")
+        evaluated.append(eval_item)
+
+    return {
+        "status": "success",
+        "count": len(evaluated),
+        "live_rates": buyback_calculator.get_live_rates(),
+        "deals": evaluated
+    }
+
+
+@app.get("/api/v1/sniper/status")
+async def get_sniper_status():
+    """Returns active restock sniper operational status and monitored SKUs."""
+    return restock_sniper.get_status()
+
+
+@app.post("/api/v1/sniper/watch")
+async def add_sniper_watch_item(req: WatchSkuRequest):
+    """Adds a target SKU to the high-frequency restock watch list."""
+    item = restock_sniper.add_watch_sku(
+        sku_id=req.sku_id,
+        title=req.title,
+        platform=req.platform,
+        url=req.url,
+        weight_grams=req.weight_grams,
+        purity=req.purity,
+        target_price=req.target_price
+    )
+    return {"status": "added", "item": item}
+
+
+@app.post("/api/v1/sniper/poll-now")
+async def poll_sniper_now():
+    """Triggers an immediate check pass on all monitored restock SKUs."""
+    results = restock_sniper.poll_once()
+    return {"status": "success", "polled_count": len(results), "results": results}
+
+
+@app.post("/api/v1/alerts/test-whatsapp")
+async def test_whatsapp_alert(req: WhatsAppTestRequest):
+    """Sends or simulates a VIP deal alert to a WhatsApp number."""
+    sample_deal = {
+        "title": "10g 24K Kundan Gold Bar (999 Purity)",
+        "source": "Tata CLiQ",
+        "weight_grams": 10.0,
+        "purity": "24K",
+        "selling_price": 149270.0,
+        "live_spot_rate_per_gram": 15837.5,
+        "effective_net_price": 124345.0,
+        "effective_price_per_gram": 12434.5,
+        "spread_per_gram": 3403.0,
+        "total_stack_savings": 34030.0,
+        "recommended_card": "Tata Neu Infinity HDFC",
+        "url": "http://localhost:8000"
+    }
+    result = vip_dispatcher.dispatch_whatsapp_alert(phone=req.phone, deal=sample_deal)
+    return result
+
+

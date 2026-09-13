@@ -36,6 +36,50 @@
             showFilterDrawer: false,
             showSourcesInfo: false,
 
+            // SaaS Monetization & Financial Arbitrage State
+            subSpotDeals: [],
+            lowMakingDeals: [],
+            arbitrageStats: {},
+            sgbTranches: [],
+            topSgbTranche: null,
+            sgbLoading: false,
+            sgbMinDiscount: -5,
+            userIsPro: localStorage.getItem('goldUserIsPro') === 'true',
+            userTier: localStorage.getItem('goldUserTier') || 'FREE',
+            showProModal: false,
+            proPlans: [],
+            selectedPlan: 'pro_monthly',
+            supportedCards: [],
+            userSelectedCards: JSON.parse(localStorage.getItem('goldUserCards') || '["HDFC_INFINIA", "TATA_NEU_INFINITY", "AMEX_PLATINUM_TRAVEL"]'),
+            cardOptimizerInput: {
+                price: 74000,
+                weight: 10,
+                purity: '24K',
+                coupon: 1000
+            },
+            cardOptimizerResult: null,
+            optimizingCard: false,
+
+            // Phase 3: Reverse Arbitrage Buyback & Sniper State
+            buybackInput: {
+                deliveredCost: 124345,
+                weight: 10,
+                purity: '24K',
+                itemType: 'bar',
+                turnoverDays: 5,
+                paymentMode: 'RTGS',
+                customSpot: null
+            },
+            buybackResult: null,
+            buybackLoading: false,
+            buybackLiveRates: { '24K': 15837.5, '22K': 14438.8, '18K': 11878.1 },
+            subSpotBuybackDeals: [],
+            sniperStatus: null,
+            sniperPolling: false,
+            sniperWatchList: [],
+            whatsAppTestPhone: '+91 9876543210',
+            whatsAppTestStatus: null,
+
             // Interactive Investment & Calculation Suite State
             calcBill: {
                 weight: 10,
@@ -164,9 +208,23 @@
             mobileMenuOpen: false,
 
             showScanModal: false,
+            showScanConfigModal: false,
             showExportModal: false,
             showFavoritesModal: false,
             selectedProduct: null,
+
+            availableScanSites: [
+                { key: 'joyalukkas', name: 'Joyalukkas', speed: 'fast', desc: 'Official API (~2s)', icon: 'fa-gem' },
+                { key: 'ajio', name: 'AJIO', speed: 'fast', desc: 'Reliance Retail (~4s)', icon: 'fa-bag-shopping' },
+                { key: 'myntra', name: 'Myntra', speed: 'fast', desc: 'Direct Catalog API (~3s)', icon: 'fa-shirt' },
+                { key: 'candere', name: 'Candere / Kalyan', speed: 'fast', desc: 'Kalyan Jewellers (~4s)', icon: 'fa-ring' },
+                { key: 'tanishq', name: 'Tanishq', speed: 'fast', desc: 'Tata Titan API (~5s)', icon: 'fa-crown' },
+                { key: 'mmtc', name: 'MMTC-PAMP', speed: 'fast', desc: 'Pure 999.9 Bullion (~3s)', icon: 'fa-coins' },
+                { key: 'josalukkas', name: 'Jos Alukkas', speed: 'fast', desc: 'Official Store (~3s)', icon: 'fa-sparkles' },
+                { key: 'malabar', name: 'Malabar Gold', speed: 'fast', desc: 'Official Pan-India (~4s)', icon: 'fa-certificate' },
+                { key: 'bhima', name: 'Bhima Gold', speed: 'slow', desc: 'Slow Pagination (multi-page)', icon: 'fa-hourglass-half' }
+            ],
+            selectedScanSites: ['joyalukkas', 'ajio', 'myntra', 'candere', 'tanishq', 'mmtc', 'josalukkas', 'malabar'],
 
             scanProgress: {
                 active: false,
@@ -232,6 +290,12 @@
         },
 
         computed: {
+            isDefaultPresetActive() {
+                const defaultKeys = ['joyalukkas', 'ajio', 'myntra', 'candere', 'tanishq', 'mmtc', 'josalukkas', 'malabar'];
+                if (this.selectedScanSites.length !== defaultKeys.length) return false;
+                return defaultKeys.every(k => this.selectedScanSites.includes(k));
+            },
+
             filteredProducts() {
                 let products = [...this.allProducts];
 
@@ -804,6 +868,15 @@
 
         mounted() {
             this.applyTheme();
+            try {
+                const savedSites = localStorage.getItem('gold_selected_scan_sites');
+                if (savedSites) {
+                    const parsed = JSON.parse(savedSites);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        this.selectedScanSites = parsed;
+                    }
+                }
+            } catch (e) {}
             window.addEventListener('resize', this.handleResize);
             this.initKeyboardShortcuts();
             this.boot();
@@ -920,6 +993,13 @@
                 if (tab === 'insights') {
                     this.$nextTick(() => this.renderCharts());
                 }
+                if (tab === 'buyback') {
+                    this.calculateBuyback();
+                    this.fetchBuybackRates();
+                }
+                if (tab === 'sniper') {
+                    this.fetchSniperStatus();
+                }
             },
 
             setCalcTab(tab) {
@@ -1022,6 +1102,13 @@
                     this.fetchSpotPrice(),
                     this.fetchDealerRates(),
                     this.fetchTimeline(),
+                    this.fetchSaaSSubscriptions(),
+                    this.fetchArbitrageRadar(),
+                    this.fetchSGBScreener(),
+                    this.fetchCardCatalog(),
+                    this.calculateBuyback(),
+                    this.fetchBuybackRates(),
+                    this.fetchSniperStatus(),
                 ]);
 
                 if (selectedScanId && !selectedScanIsLatest && this.scans.some((scan) => scan.scan_id === selectedScanId)) {
@@ -1126,17 +1213,82 @@
                 }
             },
 
-            async startNewScan() {
+            openScanModal() {
+                if (this.scanning || this.scanProgress.is_running) {
+                    this.maximizeScanModal();
+                } else {
+                    this.showScanConfigModal = true;
+                }
+            },
+
+            openScanConfig() {
+                if (this.scanning || this.scanProgress.is_running) {
+                    this.showNotification('info', 'Scan is currently in progress.');
+                    this.maximizeScanModal();
+                } else {
+                    this.showScanConfigModal = true;
+                }
+            },
+
+            selectDefaultScanSites() {
+                this.selectedScanSites = ['joyalukkas', 'ajio', 'myntra', 'candere', 'tanishq', 'mmtc', 'josalukkas', 'malabar'];
+                this.saveSelectedScanSites();
+            },
+
+            selectAllScanSites() {
+                this.selectedScanSites = this.availableScanSites.map(s => s.key);
+                this.saveSelectedScanSites();
+            },
+
+            deselectAllScanSites() {
+                this.selectedScanSites = [];
+                this.saveSelectedScanSites();
+            },
+
+            toggleScanSite(key) {
+                const idx = this.selectedScanSites.indexOf(key);
+                if (idx > -1) {
+                    this.selectedScanSites.splice(idx, 1);
+                } else {
+                    this.selectedScanSites.push(key);
+                }
+                this.saveSelectedScanSites();
+            },
+
+            isScanSiteSelected(key) {
+                return this.selectedScanSites.includes(key);
+            },
+
+            saveSelectedScanSites() {
+                try {
+                    localStorage.setItem('gold_selected_scan_sites', JSON.stringify(this.selectedScanSites));
+                } catch (e) {}
+            },
+
+            getEstimatedScanTime() {
+                if (this.selectedScanSites.includes('bhima')) {
+                    return 60;
+                }
+                return Math.max(8, this.selectedScanSites.length * 2);
+            },
+
+            async startNewScan(siteKeys) {
+                const defaultSites = ['joyalukkas', 'ajio', 'myntra', 'candere', 'tanishq', 'mmtc', 'josalukkas', 'malabar'];
+                const sitesToScrape = (Array.isArray(siteKeys) && siteKeys.length > 0)
+                    ? siteKeys
+                    : (this.selectedScanSites.length > 0 ? this.selectedScanSites : defaultSites);
+
+                this.showScanConfigModal = false;
                 this.scanProgress.active = true;
                 this.scanProgress.minimized = false;
                 this.scanProgress.status = 'running';
                 this.scanProgress.is_running = true;
                 this.scanProgress.progress_percent = 5;
-                this.scanProgress.current_site = 'Initiating scan...';
+                this.scanProgress.current_site = 'Initiating scan for ' + sitesToScrape.length + ' stores...';
                 this.scanning = true;
 
                 try {
-                    const response = await axios.post('/api/v1/scan');
+                    const response = await axios.post('/api/v1/scan', { sites: sitesToScrape });
                     if (response.data && response.data.progress) {
                         this.updateScanProgressState(response.data.progress);
                     }
@@ -1575,6 +1727,228 @@
                     },
                 });
             },
+
+            // ==========================================
+            // SAAS MONETIZATION & ARBITRAGE METHODS
+            // ==========================================
+            async fetchSaaSSubscriptions() {
+                try {
+                    const res = await axios.get('/api/v1/subscription/plans');
+                    if (res.data && res.data.plans) {
+                        this.proPlans = res.data.plans;
+                    }
+                    const profRes = await axios.get('/api/v1/user/profile');
+                    if (profRes.data) {
+                        this.userTier = profRes.data.user?.current_tier || 'FREE';
+                        this.userIsPro = profRes.data.is_pro || false;
+                        if (profRes.data.cards && profRes.data.cards.length) {
+                            this.userSelectedCards = profRes.data.cards;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching subscription data:', e);
+                }
+            },
+
+            async fetchArbitrageRadar() {
+                try {
+                    const res = await axios.get('/api/v1/arbitrage/sub-spot');
+                    if (res.data) {
+                        this.subSpotDeals = safeArray(res.data.sub_spot_deals);
+                        this.lowMakingDeals = safeArray(res.data.low_making_deals);
+                        this.arbitrageStats = {
+                            totalProfit: res.data.total_potential_arbitrage_inr || 0,
+                            subSpotCount: res.data.sub_spot_count || 0,
+                            lowMakingCount: res.data.low_making_count || 0,
+                        };
+                    }
+                } catch (e) {
+                    console.error('Error fetching arbitrage radar:', e);
+                }
+            },
+
+            async fetchSGBScreener() {
+                this.sgbLoading = true;
+                try {
+                    const res = await axios.get(`/api/v1/sgb/screener?min_discount=${this.sgbMinDiscount}`);
+                    if (res.data && res.data.tranches) {
+                        this.sgbTranches = res.data.tranches;
+                        this.topSgbTranche = res.data.top_discount_tranche || null;
+                    }
+                } catch (e) {
+                    console.error('Error fetching SGB screener:', e);
+                } finally {
+                    this.sgbLoading = false;
+                }
+            },
+
+            async fetchCardCatalog() {
+                try {
+                    const res = await axios.get('/api/v1/cards/catalog');
+                    if (res.data && res.data.cards) {
+                        this.supportedCards = res.data.cards;
+                    }
+                } catch (e) {
+                    console.error('Error fetching card catalog:', e);
+                }
+            },
+
+            async runCardOptimization() {
+                this.optimizingCard = true;
+                try {
+                    const payload = {
+                        selling_price: numeric(this.cardOptimizerInput.price),
+                        weight_grams: numeric(this.cardOptimizerInput.weight),
+                        purity: this.cardOptimizerInput.purity,
+                        coupon_discount: numeric(this.cardOptimizerInput.coupon),
+                        coupon_code: 'AUTO_PROMO',
+                        card_ids: this.userSelectedCards
+                    };
+                    const res = await axios.post('/api/v1/cards/stack', payload);
+                    if (res.data && res.data.stack) {
+                        this.cardOptimizerResult = res.data.stack;
+                    }
+                } catch (e) {
+                    console.error('Error optimizing cards:', e);
+                } finally {
+                    this.optimizingCard = false;
+                }
+            },
+
+            toggleUserCard(cardId) {
+                const idx = this.userSelectedCards.indexOf(cardId);
+                if (idx > -1) {
+                    this.userSelectedCards.splice(idx, 1);
+                } else {
+                    this.userSelectedCards.push(cardId);
+                }
+                localStorage.setItem('goldUserCards', JSON.stringify(this.userSelectedCards));
+                axios.post('/api/v1/user/cards', {
+                    user_id: 'user_default',
+                    card_ids: this.userSelectedCards
+                }).catch(() => {});
+                if (this.cardOptimizerResult) {
+                    this.runCardOptimization();
+                }
+            },
+
+            openProModal(planId = 'pro_monthly') {
+                this.selectedPlan = planId;
+                this.showProModal = true;
+            },
+
+            async upgradePlan(planId) {
+                try {
+                    const res = await axios.post('/api/v1/subscription/upgrade', {
+                        user_id: 'user_default',
+                        plan_id: planId,
+                        payment_ref: 'PAY_' + Date.now()
+                    });
+                    if (res.data && res.data.status === 'success') {
+                        this.userIsPro = true;
+                        this.userTier = res.data.subscription.tier;
+                        localStorage.setItem('goldUserIsPro', 'true');
+                        localStorage.setItem('goldUserTier', this.userTier);
+                        this.showProModal = false;
+                        alert(`🎉 Welcome to Gold Deal Pro! You are now subscribed to ${planId.toUpperCase()}. Instant sub-second VIP alerts are now unlocked.`);
+                    }
+                } catch (e) {
+                    alert('Error upgrading subscription: ' + (e.response?.data?.detail || e.message));
+                }
+            },
+
+            // Phase 3: Reverse Arbitrage Buyback & Sniper Methods
+            async calculateBuyback() {
+                this.buybackLoading = true;
+                try {
+                    const params = {
+                        delivered_cost: numeric(this.buybackInput.deliveredCost),
+                        weight: numeric(this.buybackInput.weight),
+                        purity: this.buybackInput.purity,
+                        item_type: this.buybackInput.itemType,
+                        turnover_days: numeric(this.buybackInput.turnoverDays),
+                        payment_mode: this.buybackInput.paymentMode
+                    };
+                    const res = await axios.get('/api/v1/arbitrage/buyback-calculator', { params });
+                    if (res.data) {
+                        this.buybackResult = res.data;
+                    }
+                } catch (e) {
+                    console.error('Error calculating buyback liquidation:', e);
+                } finally {
+                    this.buybackLoading = false;
+                }
+            },
+
+            async fetchBuybackRates() {
+                try {
+                    const res = await axios.get('/api/v1/arbitrage/sub-spot-buybacks?limit=20');
+                    if (res.data) {
+                        this.subSpotBuybackDeals = res.data.deals || [];
+                        if (res.data.live_rates) {
+                            this.buybackLiveRates = res.data.live_rates;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching sub-spot buybacks:', e);
+                }
+            },
+
+            loadDealIntoBuyback(deal) {
+                if (!deal) return;
+                const weight = numeric(deal.weight_grams || deal.buyback_evaluation?.weight_grams || 1);
+                const purity = deal.purity || deal.buyback_evaluation?.purity || '24K';
+                const cost = numeric(deal.effective_net_price || deal.selling_price || 15000);
+
+                this.buybackInput.deliveredCost = cost;
+                this.buybackInput.weight = weight;
+                this.buybackInput.purity = purity;
+                this.calculateBuyback();
+                window.scrollTo({ top: 100, behavior: 'smooth' });
+            },
+
+            async fetchSniperStatus() {
+                try {
+                    const res = await axios.get('/api/v1/sniper/status');
+                    if (res.data) {
+                        this.sniperStatus = res.data;
+                        this.sniperWatchList = res.data.skus || [];
+                    }
+                } catch (e) {
+                    console.error('Error fetching sniper status:', e);
+                }
+            },
+
+            async pollSniperNow() {
+                this.sniperPolling = true;
+                try {
+                    const res = await axios.post('/api/v1/sniper/poll-now');
+                    if (res.data) {
+                        await this.fetchSniperStatus();
+                    }
+                } catch (e) {
+                    console.error('Error polling sniper:', e);
+                } finally {
+                    this.sniperPolling = false;
+                }
+            },
+
+            async sendTestWhatsApp() {
+                if (!this.whatsAppTestPhone) {
+                    alert('Please enter a valid phone number');
+                    return;
+                }
+                try {
+                    const res = await axios.post('/api/v1/alerts/test-whatsapp', {
+                        phone: this.whatsAppTestPhone
+                    });
+                    if (res.data) {
+                        this.whatsAppTestStatus = res.data;
+                    }
+                } catch (e) {
+                    alert('Error testing WhatsApp: ' + (e.response?.data?.detail || e.message));
+                }
+            }
         },
     });
 })();

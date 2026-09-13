@@ -1,10 +1,13 @@
 import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SUBSCRIPTION_PLANS
 from price_calculator import GoldPriceCalculator
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 from datetime import datetime
+from database import db_manager
+from arbitrage_engine import arbitrage_engine
+from sgb_screener import sgb_screener
 
 class TelegramAlertBot:
     def __init__(self):
@@ -196,3 +199,123 @@ Will check again in the next cycle.
             text=status,
             parse_mode='HTML'
         )
+
+
+# ==========================================
+# INTERACTIVE TELEGRAM BOT SLASH COMMANDS
+# ==========================================
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_name = update.effective_user.first_name if update.effective_user else "Investor"
+    user = db_manager.get_or_create_user(user_id=f"tg_{chat_id}", telegram_chat_id=chat_id, name=user_name)
+    tier = user.get("current_tier", "FREE")
+
+    welcome_msg = f"""👋 <b>Welcome to Gold Deal Finder, {user_name}!</b>
+
+Your Current Status: <b>{tier} Member</b>
+
+⚡ <b>Available Commands:</b>
+• <code>/subspot</code> - Live bullion deals trading <b>BELOW</b> wholesale spot price
+• <code>/sgb</code> - Sovereign Gold Bond secondary market screener (Discounts & YTM)
+• <code>/upgrade</code> - Activate Pro VIP membership (Instant sub-second alerts)
+• <code>/cards</code> - View supported credit cards & active promotions
+• <code>/help</code> - Get assistance & FAQ
+
+🌐 <b>Live Web Dashboard:</b> http://localhost:8000
+"""
+    keyboard = [
+        [InlineKeyboardButton("⚡ Sub-Spot Deals", callback_data="cmd_subspot"),
+         InlineKeyboardButton("🏛️ SGB Screener", callback_data="cmd_sgb")],
+        [InlineKeyboardButton("👑 Upgrade to Pro", callback_data="cmd_upgrade"),
+         InlineKeyboardButton("🌐 Open Dashboard", url="http://localhost:8000")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(welcome_msg, parse_mode="HTML", reply_markup=reply_markup)
+
+
+async def cmd_subspot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    deals = db_manager.get_sub_spot_deals(limit=3)
+    if not deals:
+        await update.message.reply_text("🔍 Scanning market... No sub-spot negative premium deals found at this moment. Check back soon!", parse_mode="HTML")
+        return
+
+    msg = "🚨🔥 <b>TOP LIVE SUB-SPOT ARBITRAGE DEALS</b> 🔥🚨\n\n"
+    for i, d in enumerate(deals, 1):
+        title = d.get("title", "")[:45]
+        spread = d.get("arbitrage_spread_inr", 0)
+        net_price = d.get("effective_net_price", d.get("selling_price", 0))
+        net_ppg = d.get("effective_price_per_gram", 0)
+        spot_ppg = d.get("live_spot_rate_per_gram", 15837.5)
+        source = d.get("platform", d.get("source", "Store"))
+        card = d.get("recommended_card", "Optimal Card")
+
+        msg += f"<b>{i}. {source} • {title}</b>\n"
+        msg += f"   💰 Effective Price: <b>₹{net_price:,.0f}</b> (₹{net_ppg:,.0f}/g)\n"
+        msg += f"   🏪 Wholesale Spot: ₹{spot_ppg:,.0f}/g\n"
+        msg += f"   🚀 <b>Saves: ₹{spread:,.0f} BELOW SPOT!</b>\n"
+        msg += f"   💳 Best Card: {card}\n"
+        msg += f"   🛒 <a href=\"{d.get('url', 'http://localhost:8000')}\">Direct Checkout Link</a>\n\n"
+
+    msg += "⚡ <i>Sub-second alerts delivered exclusively to Pro VIP members.</i>"
+    await update.message.reply_text(msg, parse_mode="HTML", disable_web_page_preview=True)
+
+
+async def cmd_sgb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tranches = sgb_screener.scan_all_tranches()[:3]
+    if not tranches:
+        await update.message.reply_text("Unable to load SGB tranches right now. Please try again later.", parse_mode="HTML")
+        return
+
+    msg = "🏛️ <b>TOP DISCOUNTED SOVEREIGN GOLD BONDS (SGB)</b> 🏛️\n"
+    msg += "<i>RBI Guaranteed • 100% Tax-Free Capital Gains • +2.5% Annual Interest</i>\n\n"
+
+    for i, t in enumerate(tranches, 1):
+        msg += f"<b>{i}. {t['ticker']} (NSE)</b>\n"
+        msg += f"   🏷️ Market Price: <b>₹{t['ltp']:,.0f}</b> (Fair Spot: ₹{t['underlying_spot_price']:,.0f})\n"
+        msg += f"   🔥 Discount to Spot: <b>-{t['discount_to_spot_pct']}%</b>\n"
+        msg += f"   📈 Annualized YTM: <b>{t['annualized_ytm_pct']}% p.a.</b>\n"
+        msg += f"   ⏳ Maturity: {t['maturity_date']} ({t['years_to_maturity']} yrs left)\n\n"
+
+    msg += "👉 View all 60+ live tranches: http://localhost:8000"
+    await update.message.reply_text(msg, parse_mode="HTML", disable_web_page_preview=True)
+
+
+async def cmd_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = """👑 <b>UPGRADE TO GOLD DEAL PRO</b> 👑
+
+<b>Why Pro Members Never Miss a Drop:</b>
+✅ <b>0-Second VIP Telegram & WhatsApp</b> (Beats free delayed channel)
+✅ <b>Unredacted Direct Cart Links</b> with auto-applied coupons
+✅ <b>Negative Premium Engine</b> (Gold priced ₹500 to ₹3,500/g below spot)
+✅ <b>Full SGB Secondary Screener</b> with live depth and YTM
+✅ <b>Guaranteed Positive ROI:</b> Saves 5x-10x the monthly fee in 1 order!
+
+💎 <b>Subscription Plans:</b>
+• <b>Pro Monthly:</b> ₹599 / month
+• <b>Festive Pass (45 Days):</b> ₹899 (Dhanteras Special)
+• <b>Pro Annual:</b> ₹4,999 / year (Save 30%)
+
+👉 <b>Activate Your Membership:</b>
+<a href="http://localhost:8000/#pricing">Click Here to Upgrade Instantly</a>
+"""
+    keyboard = [
+        [InlineKeyboardButton("⚡ Activate Pro Now", url="http://localhost:8000")],
+        [InlineKeyboardButton("💬 Contact Support", url="https://t.me/")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=reply_markup)
+
+
+def create_bot_application() -> Optional[Application]:
+    """Factory creating telegram bot Application with command handlers attached"""
+    if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == 'YOUR_BOT_TOKEN':
+        return None
+
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("subspot", cmd_subspot))
+    app.add_handler(CommandHandler("sgb", cmd_sgb))
+    app.add_handler(CommandHandler("upgrade", cmd_upgrade))
+    return app

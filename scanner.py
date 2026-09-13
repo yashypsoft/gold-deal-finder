@@ -18,6 +18,8 @@ from gold_scraper import GoldScraper
 from telegram_bot import TelegramAlertBot
 from price_calculator import GoldPriceCalculator
 from config import MIN_DISCOUNT_PERCENTAGE, MIN_WEIGHT
+from arbitrage_engine import arbitrage_engine
+from vip_alerts import vip_dispatcher
 
 logging.basicConfig(
     level=logging.INFO,
@@ -116,15 +118,26 @@ class GitHubActionsScanner:
 
             good_deals = self.filter_good_deals(all_products)
 
+            # Evaluate real-time SaaS financial arbitrage
+            arbitrage_results = arbitrage_engine.process_catalog_arbitrage(all_products, save_to_db=True)
+            sub_spot_deals = arbitrage_results.get("sub_spot_deals", [])
+
             duration = (datetime.now() - start_time).total_seconds()
 
             logger.info(f"📊 Scan completed in {duration:.1f}s")
             logger.info(f"📦 Total products: {len(all_products)}")
             logger.info(f"🔥 Good deals: {len(good_deals)}")
+            logger.info(f"🚨 Sub-Spot Arbitrage Deals: {len(sub_spot_deals)}")
 
             self.save_results(all_products, good_deals, duration)
 
             if not self.test_run:
+                # Dispatch sub-second VIP alerts for top sub-spot deals
+                if sub_spot_deals:
+                    logger.info(f"Dispatching VIP alerts for {len(sub_spot_deals[:5])} sub-spot deals...")
+                    for deal in sub_spot_deals[:5]:
+                        await vip_dispatcher.dispatch_deal_alerts(deal)
+
                 await self.send_telegram_summary(
                     len(all_products), good_deals, duration
                 )
