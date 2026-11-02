@@ -315,7 +315,7 @@
                 }
 
                 products = products.filter((product) => {
-                    const discount = numeric(product.discount_percent);
+                    const discount = this.getProductDiscountPercent(product);
                     const weight = numeric(product.weight_grams);
                     return (
                         discount >= this.filters.min_discount &&
@@ -336,13 +336,19 @@
                 const products = [...this.filteredProducts];
                 const direction = this.sortOrder === 'desc' ? -1 : 1;
                 products.sort((left, right) => {
-                    let a = left[this.sortBy];
-                    let b = right[this.sortBy];
-
-                    if (this.sortBy === 'timestamp') {
-                        a = new Date(a || 0).getTime();
-                        b = new Date(b || 0).getTime();
+                    let a, b;
+                    if (this.sortBy === 'discount_percent') {
+                        a = this.getProductDiscountPercent(left);
+                        b = this.getProductDiscountPercent(right);
+                    } else if (this.sortBy === 'expected_price') {
+                        a = this.getProductExpectedPrice(left);
+                        b = this.getProductExpectedPrice(right);
+                    } else if (this.sortBy === 'timestamp') {
+                        a = new Date(left.timestamp || 0).getTime();
+                        b = new Date(right.timestamp || 0).getTime();
                     } else {
+                        a = left[this.sortBy];
+                        b = right[this.sortBy];
                         a = typeof a === 'string' ? a.toLowerCase() : numeric(a);
                         b = typeof b === 'string' ? b.toLowerCase() : numeric(b);
                     }
@@ -413,7 +419,10 @@
             },
 
             liveSpotPrice() {
-                return numeric(this.spotPrice?.gold?.per_gram?.['999_landed'], 8800);
+                if (this.lowestDealerRate && this.lowestDealerRate.rate_24k > 0) {
+                    return this.lowestDealerRate.rate_24k;
+                }
+                return numeric(this.spotPrice?.gold?.per_gram?.['999_landed'], 13936);
             },
 
             liveSilverPrice() {
@@ -504,10 +513,16 @@
             },
 
             karatRates() {
-                const spot24 = this.liveSpotPrice > 0 ? this.liveSpotPrice : 8800;
+                const lowest = this.lowestDealerRate;
+                const spot24 = (lowest && lowest.rate_24k > 0)
+                    ? lowest.rate_24k
+                    : (this.liveSpotPrice > 0 ? this.liveSpotPrice : 13936);
+                const spot22 = (lowest && numeric(lowest.data?.rate_22k_per_g) > 0)
+                    ? numeric(lowest.data.rate_22k_per_g)
+                    : Math.round(spot24 * (22 / 24));
                 return {
                     '24': spot24,
-                    '22': Math.round(spot24 * (22 / 24)),
+                    '22': spot22,
                     '18': Math.round(spot24 * (18 / 24)),
                     '14': Math.round(spot24 * (14 / 24)),
                     '9': Math.round(spot24 * (9 / 24)),
@@ -657,7 +672,7 @@
                 if (!this.allProducts.length) return null;
                 const valid = this.allProducts.filter((p) => {
                     const ppg = numeric(p.price_per_gram);
-                    const disc = numeric(p.discount_percent);
+                    const disc = this.getProductDiscountPercent(p);
                     const wt = numeric(p.weight_grams);
                     const title = (p.title || '').toLowerCase();
                     const isOutOfStock = p.in_stock === false || p.stock_status === 'OUT_OF_STOCK' || p.is_available === false || title.includes('out of stock') || title.includes('sold out');
@@ -665,7 +680,7 @@
                     return !isOutOfStock && ppg >= 3000 && wt >= 0.3 && disc < 40;
                 });
                 if (!valid.length) return null;
-                return [...valid].sort((a, b) => numeric(b.discount_percent) - numeric(a.discount_percent))[0];
+                return [...valid].sort((a, b) => this.getProductDiscountPercent(b) - this.getProductDiscountPercent(a))[0];
             },
 
             favoriteProducts() {
@@ -810,6 +825,13 @@
                 return list;
             },
 
+            lowestDealerRate() {
+                if (this.sortedDealerRates && this.sortedDealerRates.length) {
+                    return this.sortedDealerRates[0];
+                }
+                return null;
+            },
+
             scanTrendSeries() {
                 return [...this.scans].slice(0, 10).reverse();
             },
@@ -917,11 +939,11 @@
                 msg += `⚖️ *Gold-to-Silver Ratio:* ${gsr}:1 (${this.gsrInsight.badge})\n`;
 
                 if (best) {
-                    const savings = Math.max(0, numeric(best.expected_price) - numeric(best.selling_price));
+                    const savings = Math.max(0, this.getProductSavingsRupees(best));
                     msg += `\n🔥 *Top Deal Today:*\n`;
                     msg += `• ${best.title}\n`;
                     msg += `• Vendor: ${best.source} | Purity: ${best.purity} | ${best.weight_grams}g\n`;
-                    msg += `• Price: ${this.formatCurrency(best.selling_price)} (Save ${this.formatCurrency(savings)} / ${this.formatPercent(best.discount_percent)})\n`;
+                    msg += `• Price: ${this.formatCurrency(best.selling_price)} (Save ${this.formatCurrency(savings)} / ${this.formatPercent(this.getProductDiscountPercent(best))})\n`;
                     msg += `• Link: ${best.url}\n`;
                 }
 
@@ -944,11 +966,11 @@
 
             getProductShareText(product) {
                 if (!product) return this.getWhatsAppShareText();
-                const savings = Math.max(0, numeric(product.expected_price) - numeric(product.selling_price));
+                const savings = Math.max(0, this.getProductSavingsRupees(product));
                 const ppg = this.formatCurrency(numeric(product.price_per_gram));
                 const price = this.formatCurrency(numeric(product.selling_price));
-                const exp = this.formatCurrency(numeric(product.expected_price));
-                const disc = this.formatPercent(product.discount_percent);
+                const exp = this.formatCurrency(this.getProductExpectedPrice(product));
+                const disc = this.formatPercent(this.getProductDiscountPercent(product));
 
                 let msg = `🪙 *GOLD DEAL ALERT — ${product.source}*\n\n`;
                 msg += `✨ *${product.title}*\n`;
@@ -1053,22 +1075,57 @@
                 this.notify(`Loaded "${product.title.slice(0, 30)}..." into Jewelry Bill Calculator`, 'info');
             },
 
-            getSavingsRupees(product) {
-                return numeric(product.expected_price) - numeric(product.selling_price);
+            getProductBenchmarkRate(product) {
+                if (!product) return this.liveSpotPrice;
+                const karat = this.getPurityKaratNumber(product.purity);
+                return this.karatRates[karat] || this.karatRates['22'] || this.liveSpotPrice;
             },
 
-            getSavingsRupeesFormatted(product) {
-                const diff = this.getSavingsRupees(product);
+            getProductExpectedPrice(product) {
+                if (!product) return 0;
+                const wt = numeric(product.weight_grams);
+                const rate = this.getProductBenchmarkRate(product);
+                if (wt > 0 && rate > 0) {
+                    return Math.round(wt * rate);
+                }
+                return numeric(product.expected_price);
+            },
+
+            getProductSavingsRupees(product) {
+                if (!product) return 0;
+                return this.getProductExpectedPrice(product) - numeric(product.selling_price);
+            },
+
+            getProductDiscountPercent(product) {
+                if (!product) return 0;
+                const exp = this.getProductExpectedPrice(product);
+                const sell = numeric(product.selling_price);
+                if (exp > 0 && sell > 0) {
+                    return Math.round(((exp - sell) / exp) * 10000) / 100;
+                }
+                return numeric(product.discount_percent);
+            },
+
+            getProductSavingsFormatted(product) {
+                const diff = this.getProductSavingsRupees(product);
                 if (diff >= 0) {
                     return `₹${Math.round(diff).toLocaleString('en-IN')} cheaper`;
                 }
                 return `₹${Math.abs(Math.round(diff)).toLocaleString('en-IN')} premium`;
             },
 
+            getSavingsRupees(product) {
+                return this.getProductSavingsRupees(product);
+            },
+
+            getSavingsRupeesFormatted(product) {
+                return this.getProductSavingsFormatted(product);
+            },
+
             isTopTierDeal(product) {
-                const diff = this.getSavingsRupees(product);
-                const discount = numeric(product.discount_percent);
-                return diff >= 1000 || discount >= 5;
+                const diff = this.getProductSavingsRupees(product);
+                const discount = this.getProductDiscountPercent(product);
+                return diff >= 500 || discount >= 3;
             },
 
             runScanCommand() {
@@ -1434,9 +1491,9 @@
                         product.purity,
                         numeric(product.weight_grams),
                         numeric(product.selling_price),
-                        numeric(product.expected_price),
-                        this.getSavingsRupees(product),
-                        numeric(product.discount_percent),
+                        this.getProductExpectedPrice(product),
+                        this.getProductSavingsRupees(product),
+                        this.getProductDiscountPercent(product),
                         numeric(product.price_per_gram),
                         product.url,
                     ]);

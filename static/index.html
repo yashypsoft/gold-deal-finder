@@ -171,11 +171,11 @@
                 <section class="market-status-bar" v-if="activeTab === 'products'">
                     <div class="metric-pill">
                         <div class="metric-header">
-                            <span class="metric-title">Spot Gold (999)</span>
+                            <span class="metric-title">Lowest Dealer Benchmark (999)</span>
                             <i class="fa-solid fa-chart-line metric-icon"></i>
                         </div>
                         <div class="metric-value">{{ formatCurrency(liveSpotPrice) }}</div>
-                        <div class="metric-sub">Landed Rate per gram</div>
+                        <div class="metric-sub">{{ lowestDealerRate ? ('#1 ' + lowestDealerRate.brand + ' Rate/g') : 'Landed Rate per gram' }}</div>
                     </div>
 
                     <div class="metric-pill">
@@ -211,10 +211,10 @@
                             <i class="fa-solid fa-tag metric-icon" style="color: var(--success);"></i>
                         </div>
                         <div class="metric-value" style="color: var(--success);">
-                            {{ bestCurrentDeal ? formatCurrency(Math.max(0, bestCurrentDeal.expected_price - bestCurrentDeal.selling_price)) : '₹0' }}
+                            {{ bestCurrentDeal ? formatCurrency(Math.max(0, getProductSavingsRupees(bestCurrentDeal))) : '₹0' }}
                         </div>
                         <div class="metric-sub" v-if="bestCurrentDeal">
-                            {{ formatPercent(bestCurrentDeal.discount_percent) }} below benchmark
+                            {{ formatPercent(getProductDiscountPercent(bestCurrentDeal)) }} below benchmark
                         </div>
                     </div>
                 </section>
@@ -250,7 +250,10 @@
                         <div class="matrix-top-bar">
                             <div class="matrix-title">
                                 <i class="fa-solid fa-coins"></i>
-                                <span>Live Landed Spot Benchmarks ({{ multiKaratMatrix.unitLabel }})</span>
+                                <span>Live Landed Benchmarks ({{ multiKaratMatrix.unitLabel }})</span>
+                                <span class="rate-banner-tag" style="font-size: 0.72rem; padding: 2px 8px; margin-left: 0.5rem; background: rgba(21, 128, 61, 0.15); color: var(--success); border: 1px solid rgba(21, 128, 61, 0.3);" v-if="lowestDealerRate">
+                                    <i class="fa-solid fa-trophy" style="margin-right: 3px;"></i>Lowest of 7: {{ lowestDealerRate.brand }} (₹{{ formatNumber(lowestDealerRate.rate_24k) }}/g)
+                                </span>
                             </div>
                             <div class="segmented-group">
                                 <button class="seg-btn" :class="{ active: matrixUnit === '1g' }" @click="matrixUnit = '1g'">1g</button>
@@ -445,8 +448,8 @@
 
                             <div class="card-image-wrap">
                                 <img :src="product.image_url" :alt="product.title" class="product-img" @error="handleImageError">
-                                <div class="savings-ribbon" :class="{ 'negative': product.discount_percent < 0 }">
-                                    {{ getSavingsRupeesFormatted(product) }}
+                                <div class="savings-ribbon" :class="{ 'negative': getProductDiscountPercent(product) < 0 }">
+                                    {{ getProductSavingsFormatted(product) }}
                                 </div>
                             </div>
 
@@ -462,12 +465,12 @@
                                 <div class="card-price-matrix">
                                     <div class="price-main-row">
                                         <span class="selling-price">{{ formatCurrency(product.selling_price) }}</span>
-                                        <span class="expected-price" title="Benchmark price">{{ formatCurrency(product.expected_price) }}</span>
+                                        <span class="expected-price" :title="'Benchmark: ₹' + formatNumber(getProductExpectedPrice(product)) + ' (Based on lowest 7 dealer rate: ' + formatCurrency(getProductBenchmarkRate(product)) + '/g)'">{{ formatCurrency(getProductExpectedPrice(product)) }}</span>
                                     </div>
                                     <div class="price-sub-row">
                                         <span>Rate: <strong>{{ formatCurrency(product.price_per_gram) }}/g</strong></span>
-                                        <span :style="{ color: product.discount_percent >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }">
-                                            {{ formatPercent(product.discount_percent) }}
+                                        <span :style="{ color: getProductDiscountPercent(product) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }">
+                                            {{ formatPercent(getProductDiscountPercent(product)) }}
                                         </span>
                                     </div>
                                 </div>
@@ -732,11 +735,11 @@
                                     <td><span class="vendor-badge">{{ product.source }}</span></td>
                                     <td>{{ formatWeight(product.weight_grams) }} · {{ product.purity }}</td>
                                     <td class="num-tabular" style="font-weight: 700;">{{ formatCurrency(product.selling_price) }}</td>
-                                    <td class="num-tabular" style="color: var(--text-muted);">{{ formatCurrency(product.expected_price) }}</td>
-                                    <td class="num-tabular" style="color: var(--success); font-weight: 700;">{{ getSavingsRupeesFormatted(product) }}</td>
+                                    <td class="num-tabular" style="color: var(--text-muted);">{{ formatCurrency(getProductExpectedPrice(product)) }}</td>
+                                    <td class="num-tabular" style="color: var(--success); font-weight: 700;">{{ getProductSavingsFormatted(product) }}</td>
                                     <td class="num-tabular">{{ formatCurrency(product.price_per_gram) }}/g</td>
-                                    <td class="num-tabular" :style="{ color: product.discount_percent >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }">
-                                        {{ formatPercent(product.discount_percent) }}
+                                    <td class="num-tabular" :style="{ color: getProductDiscountPercent(product) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }">
+                                        {{ formatPercent(getProductDiscountPercent(product)) }}
                                     </td>
                                     <td>
                                         <div style="display: flex; align-items: center; gap: 0.4rem;">

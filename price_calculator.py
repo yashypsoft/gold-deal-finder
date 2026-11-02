@@ -71,6 +71,38 @@ class GoldPriceCalculator:
     def _parse_myb_response(self, response_data: Dict) -> Dict:
         """Parse response from myb-be API and return the complete data structure"""
         try:
+            # Handle goodreturns format if standard keys not present
+            if 'goodreturns' in response_data and ('spot' not in response_data or 'goldProducts' not in response_data):
+                gr = response_data['goodreturns']
+                gold_24k = float(gr.get('gold24K', 13937))
+                gold_22k = round(gold_24k * (22.0 / 24.0), 2)
+                silver_kg = float(gr.get('silverPerKg', 200000))
+                silver_gram = silver_kg / 1000.0
+                return {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "source": "live_api_goodreturns",
+                    "spot_price_per_gram": round(gold_24k, 2),
+                    "gold": {
+                        "spot_10g": round(gold_24k * 10, 2),
+                        "retail_999_10g": round(gold_24k * 10, 2),
+                        "rtgs_999_10g": round(gold_24k * 10, 2),
+                        "999_with_gst_10g": round(gold_24k * 10, 2),
+                        "retail_22k_10g": round(gold_22k * 10, 2),
+                        "retail_22k_with_gst_10g": round(gold_22k * (1 + GST_RATE/100), 2),
+                        "per_gram": {
+                            "999_spot": round(gold_24k, 2),
+                            "999_landed": round(gold_24k, 2),
+                            "22k_spot": round(gold_22k, 2),
+                            "22k_landed": round(gold_22k, 2),
+                        }
+                    },
+                    "silver": {
+                        "per_gram": round(silver_gram, 2),
+                        "per_kg": round(silver_kg, 2)
+                    },
+                    "raw_api_response": response_data
+                }
+
             # Extract spot prices
             spot = response_data['spot']
             gold_products = response_data['goldProducts']
@@ -112,6 +144,70 @@ class GoldPriceCalculator:
         except (KeyError, ValueError) as e:
             logger.error(f"Error parsing myb-be response: {e}")
             raise
+
+    def _fetch_from_dealers(self) -> Optional[Dict]:
+        """Fetch lowest rates from the 7 dealers as the benchmark gold price"""
+        try:
+            from api import _fetch_dealer_rates_sync
+            dealer_rates = _fetch_dealer_rates_sync()
+            if not dealer_rates:
+                return None
+
+            valid_dealers = [
+                (k, d) for k, d in dealer_rates.items()
+                if isinstance(d, dict) and float(d.get("rate_24k_per_g", 0)) > 1000
+            ]
+            if not valid_dealers:
+                return None
+
+            lowest_k, lowest_d = min(valid_dealers, key=lambda x: float(x[1]["rate_24k_per_g"]))
+            lowest_24k = float(lowest_d["rate_24k_per_g"])
+
+            valid_22k = [
+                float(d["rate_22k_per_g"]) for _, d in valid_dealers
+                if float(d.get("rate_22k_per_g", 0)) > 1000
+            ]
+            lowest_22k = min(valid_22k) if valid_22k else round(lowest_24k * (22.0 / 24.0), 2)
+            lowest_brand = lowest_d.get("brand", lowest_k)
+            logger.info(f"Using lowest rate from 7 dealers: {lowest_brand} @ ₹{lowest_24k}/g")
+
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": "dealer_lowest_rate",
+                "lowest_dealer": lowest_brand,
+                "lowest_dealer_key": lowest_k,
+                "spot_price_per_gram": round(lowest_24k, 2),
+                "gold": {
+                    "spot_10g": round(lowest_24k * 10, 2),
+                    "retail_999_10g": round(lowest_24k * 10, 2),
+                    "rtgs_999_10g": round(lowest_24k * 10, 2),
+                    "999_with_gst_10g": round(lowest_24k * 10, 2),
+                    "retail_22k_10g": round(lowest_22k * 10, 2),
+                    "retail_22k_with_gst_10g": round(lowest_22k * 10 * (1 + GST_RATE/100), 2),
+                    "per_gram": {
+                        "999_spot": round(lowest_24k, 2),
+                        "999_landed": round(lowest_24k, 2),
+                        "22k_spot": round(lowest_22k, 2),
+                        "22k_landed": round(lowest_22k, 2),
+                    }
+                },
+                "silver": {
+                    "per_gram": 105.0,
+                    "per_kg": 105000.0
+                },
+                "raw_api_response": {
+                    "goldByKarat": {
+                        "24K": str(round(lowest_24k * 10, 2)),
+                        "22K": str(round(lowest_22k * 10, 2)),
+                        "18K": str(round(lowest_24k * 0.75 * 10, 2)),
+                        "14K": str(round(lowest_24k * 0.585 * 10, 2)),
+                        "9K": str(round(lowest_24k * 0.375 * 10, 2)),
+                    }
+                }
+            }
+        except Exception as e:
+            logger.warning(f"Error fetching dealer lowest rates: {e}")
+            return None
     
     def _parse_goldprice_response(self, response_data: Dict) -> Dict:
         """Parse response from goldprice.org and calculate all prices"""
@@ -282,14 +378,17 @@ class GoldPriceCalculator:
                     self._memory_cache_time = current_time
                     return cached_data
             
-            # Try multiple APIs
-            output = None
-            for endpoint in self.API_ENDPOINTS:
-                result = self._fetch_from_api(endpoint)
-                if result:
-                    output = result
-                    self._last_api_call = time.time()
-                    break
+            # Try 7 dealers lowest price first (user requested benchmark)
+            output = self._fetch_from_dealers()
+
+            # If dealer fetch fails, try other APIs
+            if output is None:
+                for endpoint in self.API_ENDPOINTS:
+                    result = self._fetch_from_api(endpoint)
+                    if result:
+                        output = result
+                        self._last_api_call = time.time()
+                        break
             
             # If all APIs fail, use fallback calculation
             if output is None:

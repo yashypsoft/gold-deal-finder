@@ -514,6 +514,32 @@ async def get_historical_stats_endpoint():
     return stats
 
 
+def _recalc_product_metrics(p: Dict[str, Any], lowest_24k: float, lowest_22k: float):
+    try:
+        wt = float(p.get("weight_grams") or 0)
+        sell = float(p.get("selling_price") or 0)
+        purity = str(p.get("purity") or "24K").upper()
+        if "22" in purity or "916" in purity:
+            rate = lowest_22k
+        elif "18" in purity or "750" in purity:
+            rate = round(lowest_24k * 0.75, 2)
+        elif "14" in purity or "585" in purity:
+            rate = round(lowest_24k * 0.585, 2)
+        elif "9" in purity or "375" in purity:
+            rate = round(lowest_24k * 0.375, 2)
+        else:
+            rate = lowest_24k
+
+        if wt > 0:
+            exp = round(wt * rate, 2)
+            p["expected_price"] = exp
+            p["spot_price"] = rate
+            if exp > 0 and sell > 0:
+                p["discount_percent"] = round(((exp - sell) / exp) * 100, 2)
+    except Exception:
+        pass
+
+
 @app.get("/api/v1/historical/scan/{scan_id}")
 async def get_specific_scan(scan_id: str):
     file_path = resolve_scan_file(scan_id)
@@ -529,6 +555,17 @@ async def get_specific_scan(scan_id: str):
             status_code=500,
             detail=error_detail("scan_load_failed", f"Scan '{scan_id}' could not be loaded.", scan_id=scan_id),
         )
+
+    if scan_data and "products" in scan_data:
+        try:
+            spot_data = price_calculator.get_live_gold_price()
+            l24 = float(spot_data.get("gold", {}).get("per_gram", {}).get("999_landed", 13936.0))
+            l22 = float(spot_data.get("gold", {}).get("per_gram", {}).get("22k_landed", round(l24 * 22 / 24, 2)))
+            for prod in scan_data["products"]:
+                _recalc_product_metrics(prod, l24, l22)
+        except Exception as e:
+            logger.warning(f"Error recalculating scan metrics: {e}")
+
     return scan_data
 
 
@@ -1010,11 +1047,20 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
         "source_url": "https://www.mmtcpamp.com"
     }
     try:
-        s_mmtc = requests.Session()
-        s_mmtc.get('https://www.mmtcpamp.com/', headers={
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
-        }, timeout=5)
+        try:
+            from curl_cffi import requests as c_requests
+            s_mmtc = c_requests.Session(impersonate='chrome120')
+        except Exception:
+            s_mmtc = requests.Session()
+
+        try:
+            s_mmtc.get('https://www.mmtcpamp.com/', headers={
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
+            }, timeout=8)
+        except Exception:
+            pass
+
         res_mmtc = s_mmtc.post(
             'https://www.mmtcpamp.com/api/getQuote',
             headers={
@@ -1025,11 +1071,11 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
                 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
             },
             json={'currencyPair': 'XAU/INR', 'type': 'BUY'},
-            timeout=5
+            timeout=8
         )
         if res_mmtc.status_code == 200:
             quote = res_mmtc.json()
-            total_amount = float(quote.get('totalAmount', 16389.16))
+            total_amount = float(quote.get('totalAmount', 14839.89))
             rate_24k = round(total_amount, 2)
             rate_22k = round(rate_24k * (22.0 / 24.0), 2)
             mmtc_data.update({
@@ -1064,7 +1110,7 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
                 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
             },
             json={},
-            timeout=5
+            timeout=8
         )
         if res_jos.status_code == 200:
             rate_json = res_jos.json()
@@ -1107,7 +1153,7 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
                 'x-device-type': 'Desktop',
                 'x-platform': 'WEB'
             },
-            timeout=5
+            timeout=10
         )
         if res_joy.status_code == 200:
             joy_json = res_joy.json()
@@ -1148,7 +1194,7 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
                 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
                 'referer': 'https://www.malabargoldanddiamonds.com/in/pan-india/en/live-gold-rate.html'
             },
-            timeout=5
+            timeout=8
         )
         if res_mal.status_code == 200:
             mal_json = res_mal.json()
@@ -1176,7 +1222,7 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
     except Exception as e:
         print(f"Error fetching Malabar Gold rate: {e}")
 
-    return {
+    dealers_dict = {
         "bhima": bhima_data,
         "kalyan": kalyan_data,
         "tanishq": tanishq_data,
@@ -1185,6 +1231,29 @@ def _fetch_dealer_rates_sync() -> Dict[str, Any]:
         "joyalukkas": joyalukkas_data,
         "malabar": malabar_data
     }
+
+    # Find the lowest price among the 7 dealers
+    valid_entries = [
+        (k, v) for k, v in dealers_dict.items()
+        if isinstance(v, dict) and float(v.get("rate_24k_per_g", 0)) > 1000
+    ]
+    if valid_entries:
+        lowest_k, lowest_dealer = min(valid_entries, key=lambda item: float(item[1]["rate_24k_per_g"]))
+        lowest_24k = float(lowest_dealer["rate_24k_per_g"])
+        valid_22k = [
+            float(v["rate_22k_per_g"]) for _, v in valid_entries
+            if float(v.get("rate_22k_per_g", 0)) > 1000
+        ]
+        lowest_22k = min(valid_22k) if valid_22k else round(lowest_24k * (22.0 / 24.0), 2)
+        dealers_dict["_summary"] = {
+            "lowest_key": lowest_k,
+            "lowest_brand": lowest_dealer.get("brand", lowest_k),
+            "lowest_rate_24k": lowest_24k,
+            "lowest_rate_22k": lowest_22k,
+            "updated_at": datetime.now().isoformat()
+        }
+
+    return dealers_dict
 
 
 @app.get("/api/v1/dealer-rates")
@@ -1213,6 +1282,15 @@ async def get_latest_products(limit: int = Query(100, ge=1, le=1000, description
 
     scan_data = load_scan_file(scan_files[0])
     products = scan_data["products"][:limit] if scan_data else []
+    if products:
+        try:
+            spot_data = price_calculator.get_live_gold_price()
+            l24 = float(spot_data.get("gold", {}).get("per_gram", {}).get("999_landed", 13936.0))
+            l22 = float(spot_data.get("gold", {}).get("per_gram", {}).get("22k_landed", round(l24 * 22 / 24, 2)))
+            for prod in products:
+                _recalc_product_metrics(prod, l24, l22)
+        except Exception as e:
+            logger.warning(f"Error recalculating latest products metrics: {e}")
     set_cached_response(cache_key, products)
     return products
 
